@@ -16,63 +16,29 @@ of this pipeline.
 
 1. **Plain-ELBO (K=1) VI systematically underestimates Omega**, reproduced
    on known ground truth across dense/sparse simulated scenarios and real
-   data (Theophylline, warfarin). Importance-weighting (higher K)
-   substantially corrects it; a richer variational family (flow) corrects a
-   large part of it even at K=1, especially in well-identified (dense)
-   designs.
+   Theophylline data. Importance-weighting (higher K) substantially
+   corrects it; a richer variational family (flow) corrects a large part of
+   it even at K=1, especially in well-identified (dense) designs.
 2. **Sparse sampling roughly doubles the shrinkage** at matched K relative
    to dense sampling — the identifiability mechanism behaves as predicted.
-3. **Amortized+flow is unstable at every tested K (1, 8, 64), not just at
-   K=1** — QC-flagged suspect-fit rates are comparable across all three
-   (8/7/6 flagged fits respectively in the production grid), and the single
-   worst failure in the entire grid (LL ≈ -784,500) occurred at K=64, not
-   K=1. Higher K does not rescue this combination; it changes the *shape*
-   of the failure (from occasional loud divergence to more frequent
-   convergence onto a stable, wrong, repeatable answer) without reducing
-   its frequency. **This is specifically a flow-family problem, not a
-   general amortized-posterior problem** — the amortized encoder's output
-   serves double duty as both the flow's base distribution and its
-   conditioning input, creating a moving-target optimization compounded by
-   representational redundancy between the two components. Amortized
-   posteriors under the plain Gaussian family show none of this (see
-   Finding 5) and are excluded from nothing. Amortized+flow is excluded
-   from all headline results at every K — see Known Issues.
-4. **Real data confirms the same signature on two independent datasets.**
-   Theophylline required fixing two real bugs first (a pre-dose-sample
-   filtering bug and a badly-scaled initial guess — see the real-data
-   section below); once fixed, both Theoph and warfarin show K=1
-   under-reporting Omega relative to K=64, matching the simulated-data
-   pattern. Warfarin additionally gives an external validation point: the
-   fitted fixed effects (CL≈0.13 L/h, V≈8.0 L) fall inside the 95%
-   confidence intervals of nlmixr2's own published FOCEi fit on the same
-   data (CL: 0.134 [0.125-0.142]; V: 7.96 [7.61-8.34]), despite this
-   project's simpler 1-compartment structural model versus nlmixr2's
-   two-step transit-absorption model — real agreement on the parameters
-   that should agree, not just a directional match. Theophylline's
-   small-N (N=12) residual Omega bias is substantially explained by
-   classical small-sample MLE bias rather than a VI-specific failure
-   (tested via N-scaling: bias shrinks as N grows, holding K fixed).
-5. **ΔOFV computed from a FREE posterior is not reliable for
+3. **Amortized+flow is unstable** and excluded from all headline results
+   (see Known Issues). Free+flow and free/amortized+gaussian are solid.
+4. **Real data (Theophylline) confirms the same signature** once two real
+   bugs were fixed: a pre-dose-sample filtering bug and a badly-scaled
+   initial guess (see the real-data section below). Small-N (N=12) residual
+   bias appears to be substantially explained by classical small-sample MLE
+   bias, not a VI-specific failure (tested via N-scaling: bias shrinks as N
+   grows, holding K fixed).
+5. **IMPORTANT: ΔOFV computed from a FREE posterior is not reliable for
    likelihood-ratio tests that change random-effect structure.** The free
    posterior gives the more-complex model in a nested comparison extra
    *per-subject* free parameters (not just the population-level parameter
    nominally being tested), which classical LRT theory — including the
    correct Self-Liang boundary-mixture reference — does not account for.
-   This inflates dOFV and miscalibrates the test (boundary fraction ~26-29%
-   against a target of ~50%; KS test p~0.0003-0.0005, decisively rejecting
-   the reference distribution at both n=100 and n=300).
-   **Switching to an amortized-GAUSSIAN posterior** (no flow — see Finding
-   3 for why that combination is excluded regardless) **for this specific
-   use case corrects the boundary-mass component of the miscalibration**:
-   boundary fraction reaches ~48-50%, reproducible at both n=100 and n=300.
-   This is confirmed as a real, converged-fit effect, not an artifact of
-   non-convergence or insufficient post-hoc likelihood evaluation precision
-   (both were tested and ruled out as the explanation). **One caveat kept
-   deliberately unresolved**: a smaller residual deviation in the shape of
-   the non-boundary dOFV distribution persists under amortized-gaussian and
-   is detectable with enough replicates (n=300); its source is not yet
-   identified. Treat the boundary-mass correction as established and the
-   precise LRT p-value as still approximate. See the
+   This inflates ΔOFV and miscalibrates the test. **Switching to an
+   amortized (shared-encoder) posterior for this specific use case restores
+   approximately correct calibration** (boundary fraction ~50% vs free's
+   ~26-29%; KS test p-value ~0.03 vs free's ~0.0003-0.0005). See the
    `nlme_vi_phase2_deltaofv.py` section below. This finding is scoped to
    nested comparisons that change the number of random effects — it does
    not affect the Omega-bias findings above, which never depended on
@@ -494,11 +460,24 @@ ignore the file entirely and type your own command.
 - **`publication/` scripts don't exist yet** -- `make_tables.py`,
   `make_figures.py`, `reproduce.sh`. Build these last, once Phase 2/3
   numbers are final.
-- **Phase 3 (additional nonlinear tiers beyond Michaelis-Menten)** not
-  built as a separate script -- `OneCmtIVBolusMM` in `nlmevi_core.py`
-  covers the nonlinear tier used for Q3; a second hard tier (e.g. TMDD)
-  would be new model code following the same `log_prior`/`log_lik`/
-  `log_joint` interface.
+- **Phase 3 (the nonlinear tier) is fully integrated into
+  `nlme_vi_phase1.py`, not a separate script.** Originally planned as a
+  standalone `nlme_vi_phase3_nonlinear.py`; that plan was superseded once
+  it became clear the nonlinear scenario shares everything else Phase 1
+  already has (fit_model, QC filtering, cpu_secs tracking, summarize_v2,
+  the CLI pattern) -- a separate file would have meant duplicating all of
+  it for no benefit. Run via `--scenarios nonlinear`. The recommended,
+  stable model is `OneCmtIVBolusMMNoKmRE` (IIV on Vmax and V only, Km
+  fixed -- see its docstring: putting IIV on both Vmax and Km
+  simultaneously is a known cross-method MM identifiability problem, not
+  a VI-specific one, confirmed empirically across four independent test
+  conditions in this project). The original 3-random-effect
+  `OneCmtIVBolusMM` still exists in `nlmevi_core.py`, unused by default,
+  kept only as the documented record of that instability. A second hard
+  tier (e.g. TMDD) would most naturally be another `get_scenario()` option
+  in `nlme_vi_phase1.py`, following the same pattern, rather than a new
+  file -- new model code following the same `log_prior`/`log_lik`/
+  `log_joint` interface is all that's actually needed.
 
 ---
 
