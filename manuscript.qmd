@@ -1,0 +1,12 @@
+---
+title: "IW-VAE NLME"
+format:
+  html: default
+  pdf: default
+  docx: default
+---
+
+This is a Quarto document. To learn more about Quarto visit <https://quarto.org>.
+
+
+![A descriptive caption of the image](outputs/phase0_omega_bias.png){#fig-my-image}
