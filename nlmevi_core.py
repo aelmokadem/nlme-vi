@@ -672,13 +672,60 @@ class FlowPosterior(nn.Module):
         return eta, log_q
 
 
+class FlowPosteriorFixedBase(nn.Module):
+    """
+    FUTURE-WORK EXPERIMENT, not used by any headline result -- additive
+    only, does not replace FlowPosterior above. Tests whether decoupling
+    the flow's base distribution from the amortized encoder (as in Arruda
+    et al. 2024, "An amortized approach to non-linear mixed-effects
+    modeling", ICML) fixes amortized+flow's instability (see README Key
+    Finding 3).
+
+    Mechanism difference from FlowPosterior: there, z0 = mu + s*eps, so the
+    sample fed through the flow is STILL tied to the encoder's own
+    still-training output, even though the conditioning input is detached
+    -- a moving target. Here, z0 ~ N(0, I) is fixed from the start; the
+    encoder's (mu, log_s) is used ONLY as flow conditioning, and is NOT
+    detached this time, since it's now the sole gradient pathway back to
+    the encoder (or free per-subject parameters). This mirrors Arruda et
+    al.'s design: a fixed latent base, encoder/summary-net output feeding
+    the flow's conditioning path only.
+
+    NOT validated against any real result yet -- exists to be cheaply
+    smoke-tested, not to be trusted or used in any reported number.
+    """
+    def __init__(self, base, n_eta, n_layers=2, hidden=16):
+        super().__init__()
+        self.base = base
+        self.amortized = base.amortized
+        self.flow = ConditionalFlow(n_eta, cond_dim=2 * n_eta,
+                                    n_layers=n_layers, hidden=hidden)
+        self.strength = 1.0
+
+    def rsample_and_logq(self, batch, K, drep=False):
+        mu, log_s = self.base.params(batch)   # NOT detached -- sole gradient path now
+        n_eta = mu.shape[-1]
+        z0 = torch.randn((K,) + mu.shape, device=mu.device)   # fixed base, no mu/log_s dependence
+        log_q0 = (-0.5 * z0 ** 2 - 0.5 * math.log(2 * math.pi)).sum(-1)
+
+        cond = torch.cat([mu, log_s], dim=-1)   # differentiable this time
+        cond = cond.unsqueeze(0).expand(K, *cond.shape)
+
+        eta, log_det = self.flow(z0, cond, strength=self.strength)
+        log_q = log_q0 - log_det
+        return eta, log_q
+
+
 def make_posterior(kind, family, n_subj, n_obs, n_eta):
-    """kind: 'free' | 'amortized'.   family: 'gaussian' | 'flow'."""
+    """kind: 'free' | 'amortized'.   family: 'gaussian' | 'flow' | 'flow_fixedbase'."""
     base = FreePosterior(n_subj, n_eta) if kind == "free" else AmortizedPosterior(n_obs, n_eta)
     if family == "gaussian":
         return base.to(DEVICE)
     elif family == "flow":
         return FlowPosterior(base, n_eta).to(DEVICE)
+    elif family == "flow_fixedbase":
+        # Future-work experiment -- see FlowPosteriorFixedBase docstring.
+        return FlowPosteriorFixedBase(base, n_eta).to(DEVICE)
     raise ValueError(family)
 
 

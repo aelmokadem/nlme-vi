@@ -95,12 +95,34 @@ def table_phase0(df):
     return t.round(2).reset_index()
 
 
+def table_phase0_fixed_effects(df):
+    """Validation companion to table_phase0: fixed-effects (CL/V/ka/sigma)
+    bias by posterior x K. Expected to stay near-flat/near-zero across K,
+    UNLIKE the omegas -- this is the check that the shrinkage phenomenon is
+    specific to variance components, not a general estimation problem."""
+    fe = df[~df.param.str.startswith("om_")]
+    t = fe.groupby(["posterior", "K", "param"]).rel_bias_pct.agg(["mean", "std", "count"])
+    t.columns = ["mean_bias_pct", "sd_bias_pct", "n_estimates"]
+    return t.round(2).reset_index()
+
+
 def table_phase1_grid(df):
     """Q2/Q4: Omega bias by scenario x posterior x family x K, linear
     scenarios only (dense/sparse) -- nonlinear handled separately since it
     has different parameter names and is typically run standalone."""
     om = df[(df.param.str.startswith("om_")) & (df.scenario.isin(["dense", "sparse"]))]
     t = om.groupby(["scenario", "posterior", "family", "K"]).rel_bias_pct.agg(
+        ["mean", "std", "count"])
+    t.columns = ["mean_bias_pct", "sd_bias_pct", "n_estimates"]
+    return t.round(2).reset_index()
+
+
+def table_phase1_grid_fixed_effects(df):
+    """Validation companion to table_phase1_grid: same grouping, fixed
+    effects instead of omegas. Same purpose as table_phase0_fixed_effects,
+    across the full Q2/Q4 grid rather than just Phase 0's single scenario."""
+    fe = df[(~df.param.str.startswith("om_")) & (df.scenario.isin(["dense", "sparse"]))]
+    t = fe.groupby(["scenario", "posterior", "family", "K", "param"]).rel_bias_pct.agg(
         ["mean", "std", "count"])
     t.columns = ["mean_bias_pct", "sd_bias_pct", "n_estimates"]
     return t.round(2).reset_index()
@@ -214,10 +236,12 @@ if __name__ == "__main__":
     df = try_load(args.phase0_csv, "Phase 0 (go/no-go)")
     if df is not None:
         save_table(table_phase0(df), "table_phase0_headline", args.out)
+        save_table(table_phase0_fixed_effects(df), "table_phase0_fixed_effects", args.out)
 
     df = try_load(args.phase1_csv, "Phase 1 grid (Q2/Q4, linear)")
     if df is not None:
         save_table(table_phase1_grid(df), "table_phase1_q2q4", args.out)
+        save_table(table_phase1_grid_fixed_effects(df), "table_phase1_q2q4_fixed_effects", args.out)
 
     df = try_load(args.nonlinear_csv or args.phase1_csv, "Phase 1 nonlinear (Q3)")
     if df is not None and "nonlinear" in df.get("scenario", pd.Series(dtype=str)).unique():

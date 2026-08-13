@@ -8,71 +8,115 @@
 # the image. Only axis labels, legends, and panel labels required for
 # interpretation are included.
 #
-# USAGE
+# This version:
+#   - uses here::here() for explicit project-root-relative paths
+#   - provides sensible default input paths
+#   - still allows command-line overrides
+#   - skips missing files cleanly
+#   - prints the resolved output directory
+#   - saves both PNG and PDF versions of every figure
+#
+# Example:
+#
+# Rscript publication/make_figures.R
+#
+# or override selected paths:
 #
 # Rscript publication/make_figures.R \
 #   --phase0-csv outputs/phase0_results.csv \
-#   --phase1-csv outputs/phase1_results.csv \
-#   --theoph-csv outputs/phase2_realdata_theoph.csv \
-#   --warfarin-csv outputs/phase2_realdata_warfarin.csv \
-#   --deltaofv-free-csv outputs/phase2_deltaofv_free.csv \
-#   --deltaofv-amortized-csv outputs/phase2_deltaofv_amortized.csv \
-#   --psis-csv outputs/phase2_psis_results.csv \
 #   --out publication/figures
-#
-# Any flag can be omitted; that figure is skipped, not an error.
 
 
-# -------------------------------------------------------------------------
-# Packages
-# -------------------------------------------------------------------------
+# =========================================================================
+# PACKAGES
+# =========================================================================
 
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(readr)
+library(here)
 
 
-# -------------------------------------------------------------------------
-# Publication theme
-# -------------------------------------------------------------------------
+# =========================================================================
+# PUBLICATION THEME
+# =========================================================================
 
 theme_publication <- function(base_size = 11) {
+
   theme_bw(base_size = base_size) +
     theme(
       panel.grid.minor = element_blank(),
+
       panel.grid.major = element_line(
         linewidth = 0.3,
         colour = "grey85"
       ),
+
       strip.background = element_blank(),
-      strip.text = element_text(face = "bold"),
-      axis.title = element_text(size = base_size),
-      axis.text = element_text(size = base_size - 1),
+
+      strip.text = element_text(
+        face = "bold"
+      ),
+
+      axis.title = element_text(
+        size = base_size
+      ),
+
+      axis.text = element_text(
+        size = base_size - 1
+      ),
+
       legend.title = element_blank(),
+
       legend.position = "right"
     )
 }
 
 
-# -------------------------------------------------------------------------
-# Command-line argument handling
-# -------------------------------------------------------------------------
+# =========================================================================
+# PATH HELPERS
+# =========================================================================
+
+resolve_project_path <- function(path) {
+
+  if (is.null(path) || !nzchar(path)) {
+    return(NULL)
+  }
+
+  # Leave absolute paths unchanged.
+  if (
+    grepl("^/", path) ||
+    grepl("^[A-Za-z]:[/\\\\]", path)
+  ) {
+    return(path)
+  }
+
+  # Interpret relative paths from the project root.
+  here(path)
+}
+
+
+# =========================================================================
+# COMMAND-LINE ARGUMENTS
+# =========================================================================
 
 parse_args <- function() {
 
-  args <- commandArgs(trailingOnly = TRUE)
+  cli <- commandArgs(trailingOnly = TRUE)
 
-  defaults <- list(
-    phase0_csv = NULL,
-    phase1_csv = NULL,
-    nonlinear_csv = NULL,
-    theoph_csv = NULL,
-    warfarin_csv = NULL,
-    deltaofv_free_csv = NULL,
-    deltaofv_amortized_csv = NULL,
-    psis_csv = NULL,
-    out = "publication/figures"
+  # Sensible defaults so the script can be run directly without supplying
+  # command-line arguments.
+  args <- list(
+    phase0_csv = here("outputs", "phase0_results.csv"),
+    phase1_csv = here("outputs", "phase1_results.csv"),
+    nonlinear_csv = here("outputs", "phase1_nonlinear_results.csv"),
+    theoph_csv = here("outputs", "phase2_realdata_theoph.csv"),
+    warfarin_csv = here("outputs", "phase2_realdata_warfarin.csv"),
+    deltaofv_free_csv = here("outputs", "phase2_deltaofv_free.csv"),
+    deltaofv_amortized_csv = here("outputs", "phase2_deltaofv_amortized.csv"),
+    psis_csv = here("outputs", "phase2_psis_results.csv"),
+    out = here("publication", "figures")
   )
 
   flag_map <- c(
@@ -89,53 +133,76 @@ parse_args <- function() {
 
   i <- 1
 
-  while (i <= length(args)) {
+  while (i <= length(cli)) {
 
-    flag <- args[i]
+    flag <- cli[i]
 
-    if (flag %in% names(flag_map)) {
-
-      if (i == length(args)) {
-        stop("Missing value after ", flag)
-      }
-
-      defaults[[flag_map[[flag]]]] <- args[i + 1]
-      i <- i + 2
-
-    } else {
-
+    if (!(flag %in% names(flag_map))) {
       warning("Unknown argument: ", flag)
       i <- i + 1
+      next
     }
+
+    if (i == length(cli)) {
+      stop("Missing value after ", flag)
+    }
+
+    key <- flag_map[[flag]]
+
+    args[[key]] <- resolve_project_path(
+      cli[i + 1]
+    )
+
+    i <- i + 2
   }
 
-  defaults
+  args
 }
 
 
-# -------------------------------------------------------------------------
-# Utilities
-# -------------------------------------------------------------------------
+# =========================================================================
+# UTILITIES
+# =========================================================================
 
 try_load <- function(path, label) {
 
   if (is.null(path)) {
-    message("[skip] ", label, ": no path given")
+
+    message(
+      "[skip] ",
+      label,
+      ": no path given"
+    )
+
     return(NULL)
   }
 
   if (!file.exists(path)) {
-    message("[skip] ", label, ": ", path, " not found")
+
+    message(
+      "[skip] ",
+      label,
+      ": ",
+      normalizePath(
+        path,
+        mustWork = FALSE
+      ),
+      " not found"
+    )
+
     return(NULL)
   }
 
-  df <- read_csv(path, show_col_types = FALSE)
+  df <- read_csv(
+    path,
+    show_col_types = FALSE
+  )
 
   message(
     "[loaded] ",
     label,
     ": ",
-    path,
+    normalizePath(path),
     " (",
     nrow(df),
     " rows)"
@@ -159,13 +226,18 @@ savefig <- function(
     showWarnings = FALSE
   )
 
-  path <- file.path(
+  png_path <- file.path(
     out_dir,
     paste0(name, ".png")
   )
 
+  pdf_path <- file.path(
+    out_dir,
+    paste0(name, ".pdf")
+  )
+
   ggsave(
-    filename = path,
+    filename = png_path,
     plot = p,
     width = width,
     height = height,
@@ -174,31 +246,75 @@ savefig <- function(
     bg = "white"
   )
 
-  message("  -> ", path)
+  ggsave(
+    filename = pdf_path,
+    plot = p,
+    width = width,
+    height = height,
+    units = "in",
+    bg = "white"
+  )
+
+  message(
+    "  -> ",
+    normalizePath(
+      png_path,
+      mustWork = FALSE
+    )
+  )
+
+  message(
+    "  -> ",
+    normalizePath(
+      pdf_path,
+      mustWork = FALSE
+    )
+  )
 }
 
 
 # =========================================================================
-# FIGURES
+# FIGURE 1: PHASE 0
 # =========================================================================
-
-
-# -------------------------------------------------------------------------
-# Phase 0
-# -------------------------------------------------------------------------
 
 fig_phase0 <- function(df, out_dir) {
 
-  # Omega bias vs K, one panel per posterior.
-
   om <- df %>%
-    filter(grepl("^om_", param))
+    filter(
+      grepl("^om_", param)
+    )
+
+  if (nrow(om) == 0) {
+
+    message(
+      "[skip] Phase 0 figure: no omega rows found"
+    )
+
+    return(invisible(NULL))
+  }
 
   summary_df <- om %>%
-    group_by(posterior, param, K) %>%
+    group_by(
+      posterior,
+      param,
+      K
+    ) %>%
     summarise(
-      mean = mean(rel_bias_pct, na.rm = TRUE),
-      sem = sd(rel_bias_pct, na.rm = TRUE) / sqrt(sum(!is.na(rel_bias_pct))),
+      mean = mean(
+        rel_bias_pct,
+        na.rm = TRUE
+      ),
+
+      sem = sd(
+        rel_bias_pct,
+        na.rm = TRUE
+      ) /
+        sqrt(
+          sum(
+            !is.na(rel_bias_pct)
+          )
+        ),
+
       .groups = "drop"
     )
 
@@ -216,8 +332,12 @@ fig_phase0 <- function(df, out_dir) {
       linetype = "dashed",
       linewidth = 0.5
     ) +
-    geom_line(linewidth = 0.7) +
-    geom_point(size = 2.2) +
+    geom_line(
+      linewidth = 0.7
+    ) +
+    geom_point(
+      size = 2.2
+    ) +
     geom_errorbar(
       aes(
         ymin = mean - sem,
@@ -227,11 +347,15 @@ fig_phase0 <- function(df, out_dir) {
       linewidth = 0.6
     ) +
     scale_x_log10(
-      breaks = sort(unique(summary_df$K)),
-      labels = sort(unique(summary_df$K))
+      breaks = sort(
+        unique(summary_df$K)
+      ),
+      labels = sort(
+        unique(summary_df$K)
+      )
     ) +
     facet_wrap(
-      ~posterior,
+      ~ posterior,
       nrow = 1
     ) +
     labs(
@@ -240,7 +364,9 @@ fig_phase0 <- function(df, out_dir) {
     ) +
     theme_publication()
 
-  n_post <- length(unique(summary_df$posterior))
+  n_post <- length(
+    unique(summary_df$posterior)
+  )
 
   savefig(
     p,
@@ -252,21 +378,29 @@ fig_phase0 <- function(df, out_dir) {
 }
 
 
-# -------------------------------------------------------------------------
-# Phase 1 grid
-# -------------------------------------------------------------------------
+# =========================================================================
+# FIGURE 2: PHASE 1 GRID
+# =========================================================================
 
 fig_phase1_grid <- function(df, out_dir) {
-
-  # Omega bias vs K:
-  # scenario (rows) x family (columns),
-  # one line per posterior.
 
   om <- df %>%
     filter(
       grepl("^om_", param),
-      scenario %in% c("dense", "sparse")
+      scenario %in% c(
+        "dense",
+        "sparse"
+      )
     )
+
+  if (nrow(om) == 0) {
+
+    message(
+      "[skip] Phase 1 grid figure: no dense/sparse omega rows found"
+    )
+
+    return(invisible(NULL))
+  }
 
   summary_df <- om %>%
     group_by(
@@ -276,8 +410,21 @@ fig_phase1_grid <- function(df, out_dir) {
       K
     ) %>%
     summarise(
-      mean = mean(rel_bias_pct, na.rm = TRUE),
-      sem = sd(rel_bias_pct, na.rm = TRUE) / sqrt(sum(!is.na(rel_bias_pct))),
+      mean = mean(
+        rel_bias_pct,
+        na.rm = TRUE
+      ),
+
+      sem = sd(
+        rel_bias_pct,
+        na.rm = TRUE
+      ) /
+        sqrt(
+          sum(
+            !is.na(rel_bias_pct)
+          )
+        ),
+
       .groups = "drop"
     )
 
@@ -295,8 +442,12 @@ fig_phase1_grid <- function(df, out_dir) {
       linetype = "dashed",
       linewidth = 0.5
     ) +
-    geom_line(linewidth = 0.7) +
-    geom_point(size = 2.2) +
+    geom_line(
+      linewidth = 0.7
+    ) +
+    geom_point(
+      size = 2.2
+    ) +
     geom_errorbar(
       aes(
         ymin = mean - sem,
@@ -306,8 +457,12 @@ fig_phase1_grid <- function(df, out_dir) {
       linewidth = 0.6
     ) +
     scale_x_log10(
-      breaks = sort(unique(summary_df$K)),
-      labels = sort(unique(summary_df$K))
+      breaks = sort(
+        unique(summary_df$K)
+      ),
+      labels = sort(
+        unique(summary_df$K)
+      )
     ) +
     facet_grid(
       rows = vars(scenario),
@@ -320,8 +475,13 @@ fig_phase1_grid <- function(df, out_dir) {
     ) +
     theme_publication()
 
-  n_scen <- length(unique(summary_df$scenario))
-  n_fam <- length(unique(summary_df$family))
+  n_scen <- length(
+    unique(summary_df$scenario)
+  )
+
+  n_fam <- length(
+    unique(summary_df$family)
+  )
 
   savefig(
     p,
@@ -333,30 +493,57 @@ fig_phase1_grid <- function(df, out_dir) {
 }
 
 
-# -------------------------------------------------------------------------
-# Nonlinear tier
-# -------------------------------------------------------------------------
+# =========================================================================
+# FIGURE 3: NONLINEAR
+# =========================================================================
 
 fig_nonlinear <- function(df, out_dir) {
-
-  # Omega bias vs K for nonlinear (MM) tier,
-  # one line per omega parameter.
 
   nl <- df
 
   if ("scenario" %in% names(df)) {
+
     nl <- df %>%
-      filter(scenario == "nonlinear")
+      filter(
+        scenario == "nonlinear"
+      )
   }
 
   om <- nl %>%
-    filter(grepl("^om_", param))
+    filter(
+      grepl("^om_", param)
+    )
+
+  if (nrow(om) == 0) {
+
+    message(
+      "[skip] nonlinear figure: no omega rows found"
+    )
+
+    return(invisible(NULL))
+  }
 
   summary_df <- om %>%
-    group_by(param, K) %>%
+    group_by(
+      param,
+      K
+    ) %>%
     summarise(
-      mean = mean(rel_bias_pct, na.rm = TRUE),
-      sem = sd(rel_bias_pct, na.rm = TRUE) / sqrt(sum(!is.na(rel_bias_pct))),
+      mean = mean(
+        rel_bias_pct,
+        na.rm = TRUE
+      ),
+
+      sem = sd(
+        rel_bias_pct,
+        na.rm = TRUE
+      ) /
+        sqrt(
+          sum(
+            !is.na(rel_bias_pct)
+          )
+        ),
+
       .groups = "drop"
     )
 
@@ -374,8 +561,12 @@ fig_nonlinear <- function(df, out_dir) {
       linetype = "dashed",
       linewidth = 0.5
     ) +
-    geom_line(linewidth = 0.7) +
-    geom_point(size = 2.2) +
+    geom_line(
+      linewidth = 0.7
+    ) +
+    geom_point(
+      size = 2.2
+    ) +
     geom_errorbar(
       aes(
         ymin = mean - sem,
@@ -385,8 +576,12 @@ fig_nonlinear <- function(df, out_dir) {
       linewidth = 0.6
     ) +
     scale_x_log10(
-      breaks = sort(unique(summary_df$K)),
-      labels = sort(unique(summary_df$K))
+      breaks = sort(
+        unique(summary_df$K)
+      ),
+      labels = sort(
+        unique(summary_df$K)
+      )
     ) +
     labs(
       x = "K",
@@ -404,14 +599,14 @@ fig_nonlinear <- function(df, out_dir) {
 }
 
 
-# -------------------------------------------------------------------------
-# Real data
-# -------------------------------------------------------------------------
+# =========================================================================
+# FIGURE 4: REAL DATA
+# =========================================================================
 
-fig_realdata <- function(datasets, out_dir) {
-
-  # K=1 vs K=high grouped bar chart per omega parameter,
-  # one panel per real dataset.
+fig_realdata <- function(
+    datasets,
+    out_dir
+) {
 
   plot_df <- bind_rows(
     lapply(
@@ -427,13 +622,35 @@ fig_realdata <- function(datasets, out_dir) {
           value = TRUE
         )
 
-        k_lo <- min(df$K, na.rm = TRUE)
-        k_hi <- max(df$K, na.rm = TRUE)
+        if (length(om_cols) == 0) {
+          return(NULL)
+        }
+
+        k_lo <- min(
+          df$K,
+          na.rm = TRUE
+        )
+
+        k_hi <- max(
+          df$K,
+          na.rm = TRUE
+        )
 
         df %>%
-          filter(K %in% c(k_lo, k_hi)) %>%
-          slice_head(n = 1, by = K) %>%
-          select(K, all_of(om_cols)) %>%
+          filter(
+            K %in% c(
+              k_lo,
+              k_hi
+            )
+          ) %>%
+          slice_head(
+            n = 1,
+            by = K
+          ) %>%
+          select(
+            K,
+            all_of(om_cols)
+          ) %>%
           pivot_longer(
             cols = all_of(om_cols),
             names_to = "parameter",
@@ -441,17 +658,36 @@ fig_realdata <- function(datasets, out_dir) {
           ) %>%
           mutate(
             dataset = name,
+
             K_label = factor(
-              paste0("K=", K),
+              paste0(
+                "K=",
+                K
+              ),
               levels = c(
-                paste0("K=", k_lo),
-                paste0("K=", k_hi)
+                paste0(
+                  "K=",
+                  k_lo
+                ),
+                paste0(
+                  "K=",
+                  k_hi
+                )
               )
             )
           )
       }
     )
   )
+
+  if (nrow(plot_df) == 0) {
+
+    message(
+      "[skip] real-data figure: no omega columns found"
+    )
+
+    return(invisible(NULL))
+  }
 
   p <- ggplot(
     plot_df,
@@ -462,11 +698,13 @@ fig_realdata <- function(datasets, out_dir) {
     )
   ) +
     geom_col(
-      position = position_dodge(width = 0.8),
+      position = position_dodge(
+        width = 0.8
+      ),
       width = 0.7
     ) +
     facet_wrap(
-      ~dataset,
+      ~ dataset,
       nrow = 1,
       scales = "free_x"
     ) +
@@ -477,7 +715,9 @@ fig_realdata <- function(datasets, out_dir) {
     ) +
     theme_publication()
 
-  n <- length(datasets)
+  n <- length(
+    unique(plot_df$dataset)
+  )
 
   savefig(
     p,
@@ -489,19 +729,20 @@ fig_realdata <- function(datasets, out_dir) {
 }
 
 
-# -------------------------------------------------------------------------
-# dOFV calibration
-# -------------------------------------------------------------------------
+# =========================================================================
+# FIGURE 5: dOFV CALIBRATION
+# =========================================================================
 
-fig_deltaofv <- function(conditions, out_dir) {
-
-  # Empirical dOFV histogram vs Self-Liang mixture reference density,
-  # one panel per condition.
+fig_deltaofv <- function(
+    conditions,
+    out_dir
+) {
 
   plot_df <- bind_rows(
     lapply(
       conditions,
       function(x) {
+
         x$data %>%
           transmute(
             condition = x$name,
@@ -511,8 +752,20 @@ fig_deltaofv <- function(conditions, out_dir) {
     )
   )
 
+  if (nrow(plot_df) == 0) {
+
+    message(
+      "[skip] dOFV figure: no observations found"
+    )
+
+    return(invisible(NULL))
+  }
+
   xmax <- max(
-    max(plot_df$dofv, na.rm = TRUE),
+    max(
+      plot_df$dofv,
+      na.rm = TRUE
+    ),
     8
   )
 
@@ -530,7 +783,11 @@ fig_deltaofv <- function(conditions, out_dir) {
         tibble(
           condition = cond,
           x = xx,
-          density = 0.5 * dchisq(xx, df = 1)
+          density = 0.5 *
+            dchisq(
+              xx,
+              df = 1
+            )
         )
       }
     )
@@ -538,10 +795,14 @@ fig_deltaofv <- function(conditions, out_dir) {
 
   p <- ggplot(
     plot_df,
-    aes(x = dofv)
+    aes(
+      x = dofv
+    )
   ) +
     geom_histogram(
-      aes(y = after_stat(density)),
+      aes(
+        y = after_stat(density)
+      ),
       bins = 30,
       alpha = 0.6
     ) +
@@ -561,7 +822,7 @@ fig_deltaofv <- function(conditions, out_dir) {
       linewidth = 0.5
     ) +
     facet_wrap(
-      ~condition,
+      ~ condition,
       nrow = 1
     ) +
     labs(
@@ -571,7 +832,9 @@ fig_deltaofv <- function(conditions, out_dir) {
     ) +
     theme_publication()
 
-  n <- length(conditions)
+  n <- length(
+    unique(plot_df$condition)
+  )
 
   savefig(
     p,
@@ -583,13 +846,26 @@ fig_deltaofv <- function(conditions, out_dir) {
 }
 
 
-# -------------------------------------------------------------------------
-# PSIS
-# -------------------------------------------------------------------------
+# =========================================================================
+# FIGURE 6: PSIS / ESS
+# =========================================================================
 
-fig_psis <- function(df, out_dir) {
+fig_psis <- function(
+    df,
+    out_dir
+) {
 
-  # Per-subject ESS distributions by arm.
+  if (
+    !"ess" %in% names(df) ||
+    !"arm" %in% names(df)
+  ) {
+
+    message(
+      "[skip] PSIS figure: required columns 'ess' and/or 'arm' missing"
+    )
+
+    return(invisible(NULL))
+  }
 
   p <- ggplot(
     df,
@@ -626,12 +902,71 @@ fig_psis <- function(df, out_dir) {
 
 args <- parse_args()
 
-cat(strrep("=", 72), "\n", sep = "")
-cat("MANUSCRIPT FIGURES\n")
-cat(strrep("=", 72), "\n", sep = "")
+
+cat(
+  strrep(
+    "=",
+    72
+  ),
+  "\n",
+  sep = ""
+)
+
+cat(
+  "MANUSCRIPT FIGURES\n"
+)
+
+cat(
+  strrep(
+    "=",
+    72
+  ),
+  "\n\n",
+  sep = ""
+)
 
 
-# Phase 0 ---------------------------------------------------------------
+cat(
+  "Project root: ",
+  normalizePath(
+    here(),
+    mustWork = FALSE
+  ),
+  "\n",
+  sep = ""
+)
+
+cat(
+  "Working directory: ",
+  normalizePath(
+    getwd(),
+    mustWork = FALSE
+  ),
+  "\n",
+  sep = ""
+)
+
+cat(
+  "Figure output directory: ",
+  normalizePath(
+    args$out,
+    mustWork = FALSE
+  ),
+  "\n\n",
+  sep = ""
+)
+
+
+dir.create(
+  args$out,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+
+# -------------------------------------------------------------------------
+# Phase 0
+# -------------------------------------------------------------------------
 
 df <- try_load(
   args$phase0_csv,
@@ -639,11 +974,17 @@ df <- try_load(
 )
 
 if (!is.null(df)) {
-  fig_phase0(df, args$out)
+
+  fig_phase0(
+    df,
+    args$out
+  )
 }
 
 
-# Phase 1 ---------------------------------------------------------------
+# -------------------------------------------------------------------------
+# Phase 1 grid
+# -------------------------------------------------------------------------
 
 df <- try_load(
   args$phase1_csv,
@@ -651,32 +992,35 @@ df <- try_load(
 )
 
 if (!is.null(df)) {
-  fig_phase1_grid(df, args$out)
+
+  fig_phase1_grid(
+    df,
+    args$out
+  )
 }
 
 
-# Nonlinear -------------------------------------------------------------
-
-nonlinear_path <- if (!is.null(args$nonlinear_csv)) {
-  args$nonlinear_csv
-} else {
-  args$phase1_csv
-}
+# -------------------------------------------------------------------------
+# Nonlinear
+# -------------------------------------------------------------------------
 
 df <- try_load(
-  nonlinear_path,
+  args$nonlinear_csv,
   "Phase 1 nonlinear"
 )
 
 if (!is.null(df)) {
 
   has_nonlinear <-
-    "scenario" %in% names(df) &&
+    !"scenario" %in% names(df) ||
     "nonlinear" %in% df$scenario
 
   if (has_nonlinear) {
 
-    fig_nonlinear(df, args$out)
+    fig_nonlinear(
+      df,
+      args$out
+    )
 
   } else {
 
@@ -688,9 +1032,12 @@ if (!is.null(df)) {
 }
 
 
-# Real data -------------------------------------------------------------
+# -------------------------------------------------------------------------
+# Real data
+# -------------------------------------------------------------------------
 
 realdata <- list()
+
 
 df <- try_load(
   args$theoph_csv,
@@ -698,32 +1045,47 @@ df <- try_load(
 )
 
 if (!is.null(df)) {
-  realdata[[length(realdata) + 1]] <- list(
+
+  realdata[[
+    length(realdata) + 1
+  ]] <- list(
     name = "theophylline",
     data = df
   )
 }
 
+
 df <- try_load(
   args$warfarin_csv,
-  "warfarin"
+  "Warfarin"
 )
 
 if (!is.null(df)) {
-  realdata[[length(realdata) + 1]] <- list(
+
+  realdata[[
+    length(realdata) + 1
+  ]] <- list(
     name = "warfarin",
     data = df
   )
 }
 
+
 if (length(realdata) > 0) {
-  fig_realdata(realdata, args$out)
+
+  fig_realdata(
+    realdata,
+    args$out
+  )
 }
 
 
-# dOFV calibration ------------------------------------------------------
+# -------------------------------------------------------------------------
+# dOFV calibration
+# -------------------------------------------------------------------------
 
 calib <- list()
+
 
 df <- try_load(
   args$deltaofv_free_csv,
@@ -731,11 +1093,15 @@ df <- try_load(
 )
 
 if (!is.null(df)) {
-  calib[[length(calib) + 1]] <- list(
+
+  calib[[
+    length(calib) + 1
+  ]] <- list(
     name = "free",
     data = df
   )
 }
+
 
 df <- try_load(
   args$deltaofv_amortized_csv,
@@ -743,18 +1109,28 @@ df <- try_load(
 )
 
 if (!is.null(df)) {
-  calib[[length(calib) + 1]] <- list(
+
+  calib[[
+    length(calib) + 1
+  ]] <- list(
     name = "amortized",
     data = df
   )
 }
 
+
 if (length(calib) > 0) {
-  fig_deltaofv(calib, args$out)
+
+  fig_deltaofv(
+    calib,
+    args$out
+  )
 }
 
 
-# PSIS ------------------------------------------------------------------
+# -------------------------------------------------------------------------
+# PSIS
+# -------------------------------------------------------------------------
 
 df <- try_load(
   args$psis_csv,
@@ -762,13 +1138,39 @@ df <- try_load(
 )
 
 if (!is.null(df)) {
-  fig_psis(df, args$out)
+
+  fig_psis(
+    df,
+    args$out
+  )
 }
 
 
+# -------------------------------------------------------------------------
+# Finish
+# -------------------------------------------------------------------------
+
+cat("\n")
+
 cat(
-  "\nDone. Figures written to ",
-  args$out,
-  "/\n",
+  strrep(
+    "=",
+    72
+  ),
+  "\n",
+  sep = ""
+)
+
+cat(
+  "Done.\n"
+)
+
+cat(
+  "Figures written to:\n",
+  normalizePath(
+    args$out,
+    mustWork = FALSE
+  ),
+  "\n",
   sep = ""
 )
