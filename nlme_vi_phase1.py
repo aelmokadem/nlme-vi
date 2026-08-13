@@ -232,7 +232,19 @@ def get_scenario(name, args):
         # explicitly sets its true value to match the reduced model it
         # fits, rather than testing robustness to omitting a real effect).
         mp.om_Km = 0.0
-        times = [0.5, 4.0, 12.0, 24.0, 36.0, 48.0, 60.0]
+        # Window shortened back to 24h now that Km has no IIV -- the 36-60h
+        # tail was specifically needed to see Km's saturated-to-first-order
+        # transition, which no longer matters once Km isn't a random effect.
+        # dose=300 is KEPT (not reverted) -- dose doesn't affect RK4 step
+        # count at all (only window length does), and a higher dose still
+        # gives Vmax a cleaner saturated-regime signal to identify against
+        # (at dose=300, concentration stays >2x Km through the full 24h
+        # window; at the original dose=100 it was only ~1.6x Km even at
+        # t=0). This cuts RK4 grid cost by 2.5x (60h -> 24h) vs the
+        # validated design, at zero expected cost to Vmax/V's estimability
+        # -- worth confirming empirically before trusting it for production,
+        # not just assuming.
+        times = [0.5, 4.0, 12.0, 24.0]
         grid, obs_idx = build_grid(times, dt_max=args.mm_dt)
         model = OneCmtIVBolusMMNoKmRE(mp.dose, grid, obs_idx)
         theta_init = [math.log(6.0), math.log(3.0), math.log(25.0),
