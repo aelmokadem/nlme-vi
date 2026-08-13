@@ -52,6 +52,7 @@ REQUIRES  nlmevi_core.py in the same directory.
 import argparse
 import math
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
@@ -232,19 +233,23 @@ def get_scenario(name, args):
         # explicitly sets its true value to match the reduced model it
         # fits, rather than testing robustness to omitting a real effect).
         mp.om_Km = 0.0
-        # Window shortened back to 24h now that Km has no IIV -- the 36-60h
-        # tail was specifically needed to see Km's saturated-to-first-order
-        # transition, which no longer matters once Km isn't a random effect.
-        # dose=300 is KEPT (not reverted) -- dose doesn't affect RK4 step
-        # count at all (only window length does), and a higher dose still
-        # gives Vmax a cleaner saturated-regime signal to identify against
-        # (at dose=300, concentration stays >2x Km through the full 24h
-        # window; at the original dose=100 it was only ~1.6x Km even at
-        # t=0). This cuts RK4 grid cost by 2.5x (60h -> 24h) vs the
-        # validated design, at zero expected cost to Vmax/V's estimability
-        # -- worth confirming empirically before trusting it for production,
-        # not just assuming.
-        times = [0.5, 4.0, 12.0, 24.0]
+        # REVERTED back to the 60h window after testing the 24h version and
+        # finding it genuinely broken, not just undertrained: Km +482% bias,
+        # Vmax +107% bias at 9000 steps (matched budget) -- qualitatively
+        # different from every other undertrained snapshot in this project
+        # (which showed 10-90% biases, never multiples of truth). Mechanism:
+        # confirmed earlier that concentration stays >2x Km (fully
+        # saturated) for the ENTIRE 24h window at this dose. In that regime
+        # the MM equation is structurally insensitive to Km (elimination
+        # rate ~ Vmax once C >> Km) -- so the 24h window doesn't just lack
+        # information for Km's IIV, it lacks information for Km's
+        # POPULATION-LEVEL fixed effect too. Km sits on a nearly flat
+        # likelihood surface and can drift arbitrarily, dragging the
+        # (structurally correlated) Vmax estimate with it. The 60h window's
+        # 36-60h tail is load-bearing for identifying population Km, not
+        # optional now that Km's IIV is gone -- confirmed by the original
+        # 60h/9000-step run showing a plausible -26% Km bias, not a blowup.
+        times = [0.5, 4.0, 12.0, 24.0, 36.0, 48.0, 60.0]
         grid, obs_idx = build_grid(times, dt_max=args.mm_dt)
         model = OneCmtIVBolusMMNoKmRE(mp.dose, grid, obs_idx)
         theta_init = [math.log(6.0), math.log(3.0), math.log(25.0),
@@ -256,64 +261,113 @@ def get_scenario(name, args):
     raise ValueError(name)
 
 
+def _fit_one_cell(scen_name, rep, kind, family, K, args):
+    """
+    Fits ONE (scenario, replicate, posterior, family, K) cell. Module-level
+    and takes only plain picklable arguments (args is an argparse.Namespace,
+    which pickles fine -- just attribute storage, no file handles or other
+    unpicklable state) so it can be dispatched to a separate process --
+    each worker rebuilds the scenario (model, data-generating function,
+    theta_init, param names, truth vector) fresh via get_scenario(),
+    matching the established pattern in nlme_vi_phase2_deltaofv.py's
+    _fit_one_replicate. This means data gets regenerated once per CELL
+    rather than shared across all (posterior,family,K) combinations within
+    a replicate the way the original sequential loop did -- a deliberate
+    tradeoff: some redundant (but cheap, deterministic-given-seed)
+    data-generation work in exchange for every cell being fully
+    independent, which is what makes parallel dispatch simple and correct.
+    Same seed always produces identical data regardless of how many times
+    it's regenerated, so this does not affect correctness, only wastes a
+    little compute relative to a more complex shared-data design.
+
+    torch.set_num_threads(1) is not optional -- see the identical comment
+    in nlme_vi_phase2_deltaofv.py: combined with multiple worker
+    PROCESSES, PyTorch's own multi-threaded ops would oversubscribe the
+    machine's cores and make total throughput WORSE than running serially.
+
+    Returns (list_of_row_dicts, log_line_string).
+    """
+    torch.set_num_threads(1)
+    model, data_fn, theta_init, names, truth, n_subj, n_steps = get_scenario(scen_name, args)
+    seed = 3000 + rep
+    data = data_fn(seed)
+
+    mc_reps = args.mc_reps_k1 if (family == "flow" and K == 1) else 1
+    n_eta = model.n_eta
+
+    t0 = time.time()
+    theta, q, ll, ess, top, n_run, converged, cpu_secs = fit_model(
+        model, data, kind, family, K, theta_init,
+        n_eta=n_eta, n_steps=n_steps, drep=not args.no_drep,
+        seed=rep, mc_reps=mc_reps, max_steps=args.max_steps,
+    )
+    est = np.concatenate([
+        np.exp(theta[:3]), np.exp(theta[3:3 + n_eta]),
+        [np.exp(theta[3 + n_eta])],
+    ])
+    secs = time.time() - t0
+
+    rows = []
+    for j, pname in enumerate(names):
+        rows.append(dict(
+            scenario=scen_name, replicate=rep, seed=seed,
+            posterior=kind, family=family, K=K, param=pname,
+            estimate=est[j], truth=truth[j],
+            rel_bias_pct=100 * (est[j] - truth[j]) / truth[j],
+            marginal_ll=ll, mean_ess=float(ess.mean()),
+            n_steps_run=n_run, converged=converged,
+            secs=secs, cpu_secs=cpu_secs,
+        ))
+    flag = "" if converged else "  *** DID NOT CONVERGE ***"
+    log_line = (f"  [{scen_name:9s}] rep {rep:2d} | {kind:9s}/{family:8s} K={K:3d} | "
+               f"om avg est {est[3:3+n_eta].mean():.3f} "
+               f"(truth {truth[3:3+n_eta].mean():.3f}) | "
+               f"LL {ll:8.1f} | steps={n_run:6d} | {secs:5.1f}s{flag}")
+    return rows, log_line
+
+
 def run_grid(args):
     scenarios = args.scenarios.split(",")
     families = args.families.split(",")
     posteriors = args.posteriors.split(",")
     K_grid = [int(k) for k in args.K.split(",")]
+    n_workers = getattr(args, "n_workers", 1)
 
-    rows = []
+    # Print scenario-level notices in scenario order FIRST (preserved from
+    # the original sequential behavior -- e.g. the nonlinear-tier cost
+    # warning), decoupled from cell dispatch so this stays correct whether
+    # cells are then run serially or in parallel.
+    cells = []
     for scen_name in scenarios:
-        model, data_fn, theta_init, names, truth, n_subj, n_steps = get_scenario(scen_name, args)
         n_reps = args.nl_reps if scen_name == "nonlinear" else args.reps
         if scen_name == "nonlinear":
-            print(f"\n[nonlinear tier is expensive: N={n_subj}, reps={n_reps}, "
-                  f"grid dt={args.mm_dt} -- override with --nl-* flags]")
-
+            print(f"\n[nonlinear tier is expensive: N={args.nl_subjects}, reps={n_reps}, "
+                 f"grid dt={args.mm_dt} -- override with --nl-* flags]")
         for rep in range(n_reps):
-            seed = 3000 + rep
-            data = data_fn(seed)   # ONE dataset per (scenario, rep); every arm below shares it
-
             for kind in posteriors:
                 for family in families:
                     for K in K_grid:
-                        t0 = time.time()
-                        # mc_reps: only the flow family at small K showed
-                        # gradient-noise instability (amortized+flow+K=1).
-                        # Gaussian never needed it; K>=8 already gets
-                        # averaging for free from the logsumexp itself.
-                        mc_reps = args.mc_reps_k1 if (family == "flow" and K == 1) else 1
-                        n_eta = model.n_eta   # NOT hardcoded -- varies by scenario
-                        # (e.g. 3 for linear/dense/sparse, 2 for the nonlinear
-                        # tier's recommended no-Km-RE model)
-                        theta, q, ll, ess, top, n_run, converged, cpu_secs = fit_model(
-                            model, data, kind, family, K, theta_init,
-                            n_eta=n_eta, n_steps=n_steps, drep=not args.no_drep,
-                            seed=rep, mc_reps=mc_reps, max_steps=args.max_steps,
-                        )
-                        # Generic extraction: every model here uses the same
-                        # [3 fixed effects][n_eta omegas][1 sigma] layout,
-                        # just with n_eta varying -- NOT always index 3:6/6.
-                        est = np.concatenate([
-                            np.exp(theta[:3]), np.exp(theta[3:3 + n_eta]),
-                            [np.exp(theta[3 + n_eta])],
-                        ])
-                        for j, pname in enumerate(names):
-                            rows.append(dict(
-                                scenario=scen_name, replicate=rep, seed=seed,
-                                posterior=kind, family=family, K=K, param=pname,
-                                estimate=est[j], truth=truth[j],
-                                rel_bias_pct=100 * (est[j] - truth[j]) / truth[j],
-                                marginal_ll=ll, mean_ess=float(ess.mean()),
-                                n_steps_run=n_run, converged=converged,
-                                secs=time.time() - t0, cpu_secs=cpu_secs,
-                            ))
-                        flag = "" if converged else "  *** DID NOT CONVERGE ***"
-                        print(f"  [{scen_name:9s}] rep {rep:2d} | {kind:9s}/{family:8s} K={K:3d} | "
-                              f"om avg est {est[3:3+n_eta].mean():.3f} "
-                              f"(truth {truth[3:3+n_eta].mean():.3f}) | "
-                              f"LL {ll:8.1f} | steps={n_run:6d} | {time.time()-t0:5.1f}s{flag}")
+                        cells.append((scen_name, rep, kind, family, K))
 
+    if n_workers <= 1:
+        rows = []
+        for scen_name, rep, kind, family, K in cells:
+            cell_rows, log_line = _fit_one_cell(scen_name, rep, kind, family, K, args)
+            rows.extend(cell_rows)
+            print(log_line)
+        return pd.DataFrame(rows)
+
+    print(f"  Running {len(cells)} fits across {n_workers} worker processes...")
+    rows = []
+    n_done = 0
+    with ProcessPoolExecutor(max_workers=n_workers) as ex:
+        futures = {ex.submit(_fit_one_cell, scen_name, rep, kind, family, K, args): None
+                  for scen_name, rep, kind, family, K in cells}
+        for fut in as_completed(futures):
+            cell_rows, log_line = fut.result()
+            rows.extend(cell_rows)
+            n_done += 1
+            print(f"  [{n_done:4d}/{len(cells)}]{log_line}")
     return pd.DataFrame(rows)
 
 
@@ -494,99 +548,97 @@ def make_figure_v2(df, path):
 
 
 # %% ------------------------------------------------------------- config
-# Plain top-level variables alongside the argparse Namespace (`args`) that
-# run_grid() consumes -- change any CAPS variable directly and re-run the
-# cell(s) below, same as passing a different CLI flag. parse_known_args()
-# keeps this safe to run inside an interactive kernel.
-ap = argparse.ArgumentParser()
-ap.add_argument("--converge-check", action="store_true",
-                help="run Q1 only: convergence trace for a single replicate, then exit")
-ap.add_argument("--converge-steps", type=int, default=25000,
-                help="safety cap for the convergence check (stops earlier "
-                     "on its own once omega plateaus)")
+# NOTE: unlike phase0.py, this file now DOES use `if __name__ == "__main__":`
+# below, same as nlme_vi_phase2_deltaofv.py and for the identical reason:
+# --n-workers > 1 uses ProcessPoolExecutor, which spawns processes that
+# re-import this file to find _fit_one_cell. On macOS, spawn is the default
+# start method, meaning each worker executes this module's top-level code
+# up to (but not including) a __main__ guard -- without one, every worker
+# would re-parse argv and re-run the entire grid, recursively spawning its
+# own pool of workers. Function/class definitions above this point are
+# still safe to run cell-by-cell interactively; only this final block needs
+# a full script invocation (`python nlme_vi_phase1.py ...` / `uv run ...`).
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--converge-check", action="store_true",
+                    help="run Q1 only: convergence trace for a single replicate, then exit")
+    ap.add_argument("--converge-steps", type=int, default=25000,
+                    help="safety cap for the convergence check (stops earlier "
+                         "on its own once omega plateaus)")
 
-ap.add_argument("--scenarios", default="dense,sparse",
-                help="comma list from {dense, sparse, nonlinear}")
-ap.add_argument("--families", default="gaussian,flow",
-                help="comma list from {gaussian, flow}")
-ap.add_argument("--posteriors", default="free,amortized",
-                help="comma list from {free, amortized}")
-ap.add_argument("--K", default="1,8,64")
-ap.add_argument("--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"],
-                help="default stays cpu (unchanged prior behavior). MPS "
-                     "(Apple Silicon GPU) does NOT support float64, which "
-                     "this project requires throughout -- 'mps' and "
-                     "'auto'-detecting MPS both raise a clear error rather "
-                     "than silently falling back or failing deep in model "
-                     "construction. On Apple Silicon, cpu is the only "
-                     "supported option for this codebase. 'cuda' is "
-                     "untested for the RK4 nonlinear tier specifically.")
-ap.add_argument("--max-steps", type=int, default=25000,
-                help="safety cap for adaptive convergence-based training; "
-                     "NOT a fixed step count")
-ap.add_argument("--mc-reps-k1", type=int, default=8,
-                help="gradient-noise-reduction reps for flow family at K=1")
+    ap.add_argument("--scenarios", default="dense,sparse",
+                    help="comma list from {dense, sparse, nonlinear}")
+    ap.add_argument("--families", default="gaussian,flow",
+                    help="comma list from {gaussian, flow}")
+    ap.add_argument("--posteriors", default="free,amortized",
+                    help="comma list from {free, amortized}")
+    ap.add_argument("--K", default="1,8,64")
+    ap.add_argument("--device", default="cpu", choices=["cpu", "auto", "cuda", "mps"],
+                    help="default stays cpu (unchanged prior behavior). MPS "
+                         "(Apple Silicon GPU) does NOT support float64, which "
+                         "this project requires throughout -- 'mps' and "
+                         "'auto'-detecting MPS both raise a clear error rather "
+                         "than silently falling back or failing deep in model "
+                         "construction. On Apple Silicon, cpu is the only "
+                         "supported option for this codebase. 'cuda' is "
+                         "untested for the RK4 nonlinear tier specifically.")
+    ap.add_argument("--max-steps", type=int, default=25000,
+                    help="safety cap for adaptive convergence-based training; "
+                         "NOT a fixed step count")
+    ap.add_argument("--mc-reps-k1", type=int, default=8,
+                    help="gradient-noise-reduction reps for flow family at K=1")
+    ap.add_argument("--n-workers", type=int, default=1,
+                    help="fits are fully independent (each rebuilds its own "
+                         "model+data from a seed) -- run this many in parallel "
+                         "worker processes. Try os.cpu_count()-1 on a "
+                         "multi-core machine. Default 1 = original sequential "
+                         "behavior, unchanged. Only affects the Q2-4 grid, "
+                         "not --converge-check.")
 
-ap.add_argument("--reps", type=int, default=8)
-ap.add_argument("--steps", type=int, default=3000,
-                help="fallback step count if --no-adaptive; ignored otherwise")
-ap.add_argument("--subjects", type=int, default=120)
+    ap.add_argument("--reps", type=int, default=8)
+    ap.add_argument("--steps", type=int, default=3000,
+                    help="fallback step count if --no-adaptive; ignored otherwise")
+    ap.add_argument("--subjects", type=int, default=120)
 
-ap.add_argument("--nl-reps", type=int, default=4,
-                help="nonlinear tier is expensive -- kept small by default")
-ap.add_argument("--nl-steps", type=int, default=1500)
-ap.add_argument("--nl-subjects", type=int, default=60)
-ap.add_argument("--mm-dt", type=float, default=0.1, help="RK4 grid spacing (h)")
+    ap.add_argument("--nl-reps", type=int, default=4,
+                    help="nonlinear tier is expensive -- kept small by default")
+    ap.add_argument("--nl-steps", type=int, default=1500)
+    ap.add_argument("--nl-subjects", type=int, default=60)
+    ap.add_argument("--mm-dt", type=float, default=0.1, help="RK4 grid spacing (h)")
 
-ap.add_argument("--no-drep", action="store_true")
-ap.add_argument("--out", default="/mnt/user-data/outputs")
-args, _ = ap.parse_known_args()
+    ap.add_argument("--no-drep", action="store_true")
+    ap.add_argument("--out", default="/mnt/user-data/outputs")
+    args, _ = ap.parse_known_args()
 
-RESOLVED_DEVICE = set_device(args.device)
+    RESOLVED_DEVICE = set_device(args.device)
 
-CONVERGE_CHECK = args.converge_check
-SCENARIOS, FAMILIES, POSTERIORS, K = args.scenarios, args.families, args.posteriors, args.K
-OUT = args.out
-print(f"config: CONVERGE_CHECK={CONVERGE_CHECK}  scenarios={SCENARIOS}  "
-     f"families={FAMILIES}  posteriors={POSTERIORS}  K={K}  device={RESOLVED_DEVICE}  out={OUT}")
+    CONVERGE_CHECK = args.converge_check
+    SCENARIOS, FAMILIES, POSTERIORS, K = args.scenarios, args.families, args.posteriors, args.K
+    OUT = args.out
+    print(f"config: CONVERGE_CHECK={CONVERGE_CHECK}  scenarios={SCENARIOS}  "
+         f"families={FAMILIES}  posteriors={POSTERIORS}  K={K}  device={RESOLVED_DEVICE}  "
+         f"n_workers={args.n_workers}  out={OUT}")
 
+    # %% ================================================= Q1: convergence
+    if CONVERGE_CHECK:
+        print("=" * 78)
+        print("Q1: CONVERGENCE CHECK -- does K=1's bias plateau, or is it still moving?")
+        print("=" * 78)
+        converge_check(max_steps=args.converge_steps, out=OUT, drep=not args.no_drep)
 
-# %% ===================================================== Q1: convergence
-# Independent of everything below -- run this cell on its own for the Q1
-# check. Does nothing if CONVERGE_CHECK is False and you're running the
-# whole file top-to-bottom as a script; run it directly and explicitly if
-# you just want Q1 in an interactive session regardless of that flag.
-if CONVERGE_CHECK:
-    print("=" * 78)
-    print("Q1: CONVERGENCE CHECK -- does K=1's bias plateau, or is it still moving?")
-    print("=" * 78)
-    converge_check(max_steps=args.converge_steps, out=OUT, drep=not args.no_drep)
+    # %% ================================================= Q2-4: the grid
+    if not CONVERGE_CHECK:
+        print("=" * 78)
+        print(f"PHASE 1 GRID  scenarios={SCENARIOS}  families={FAMILIES}  "
+             f"posteriors={POSTERIORS}  K={K}")
+        print("=" * 78)
 
+        df = run_grid(args)
 
-# %% ===================================================== Q2-4: the grid
-# Skipped automatically in a top-to-bottom script run if --converge-check
-# was passed (so `python nlme_vi_phase1.py --converge-check` still does
-# ONLY Q1, matching the old behavior) -- but runnable directly and
-# explicitly in an interactive session regardless of that flag, same as Q1
-# above.
-if not CONVERGE_CHECK:
-    print("=" * 78)
-    print(f"PHASE 1 GRID  scenarios={SCENARIOS}  families={FAMILIES}  "
-          f"posteriors={POSTERIORS}  K={K}")
-    print("=" * 78)
+        # %% ---------------------------------------------- summarize
+        piv = summarize_v2(df)
 
-    df = run_grid(args)
-    # `df` is now sitting in your interactive session -- inspect it directly,
-    # e.g. df.query("scenario=='sparse' and family=='flow'")
-
-
-# %% -------------------------------------------------------- summarize
-if not CONVERGE_CHECK:
-    piv = summarize_v2(df)
-
-
-# %% ---------------------------------------------------- save + figure
-if not CONVERGE_CHECK:
-    df.to_csv(f"{OUT}/phase1_results.csv", index=False)
-    make_figure_v2(df, f"{OUT}/phase1_grid.png")
-    print(f"\nRaw results -> {OUT}/phase1_results.csv")
+        # %% ---------------------------------------- save + figure
+        df.to_csv(f"{OUT}/phase1_results.csv", index=False)
+        make_figure_v2(df, f"{OUT}/phase1_grid.png")
+        print(f"\nRaw results -> {OUT}/phase1_results.csv")

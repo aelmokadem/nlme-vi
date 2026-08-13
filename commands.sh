@@ -55,21 +55,50 @@ phase1_flow_grid() {
         --posteriors free --K 1,8,64 --reps 30
 }
 
-phase1_nonlinear() {
-    # Expensive (RK4-integrated, no closed form) -- kept small by default.
-    python nlme_vi_phase1.py --scenarios dense,sparse,nonlinear \
-        --nl-reps 20 --nl-steps 1500 --nl-subjects 60
+phase1_nonlinear_check() {
+    # Cheap exploratory scale -- confirms the pipeline runs and gives a
+    # rough directional read before committing to the expensive production
+    # run below. NOT a production result.
+    python nlme_vi_phase1.py --scenarios nonlinear --families gaussian \
+        --posteriors free --K 1,64 --nl-reps 1 --nl-subjects 15 --mm-dt 0.5 \
+        --max-steps 9000 --device cpu --out .
+}
+
+phase1_nonlinear_production() {
+    # The real run. Model/design are finalized (see README Key Finding 6:
+    # OneCmtIVBolusMMNoKmRE, dose=300, 60h window -- baked into
+    # get_scenario(), not exposed as flags here). Expect several hours even
+    # with parallelism -- see README's cost estimate. flow/amortized+flow
+    # deliberately excluded: flow was never validated on this tier, and
+    # amortized+flow's known instability (every K, see Key Finding 3) makes
+    # it not worth risking in an expensive unattended run.
+    local workers; workers=$(( $(n_cores) - 1 ))
+    $(maybe_caffeinate) python nlme_vi_phase1.py --scenarios nonlinear \
+        --families gaussian --posteriors free,amortized \
+        --nl-reps 20 --nl-subjects 60 --mm-dt 0.1 --n-workers "$workers" --out .
+    echo ""
+    echo "IMPORTANT: copy phase1_results.csv to a distinct name now, e.g.:"
+    echo "  cp phase1_results.csv phase1_nonlinear_results.csv"
+    echo "before running anything else that writes to the same default filename."
 }
 
 # ===================================================== Phase 2: real data
 realdata_theoph() {
     uv run phase2/nlme_vi_phase2_realdata.py --dataset theoph --K 1,64 --max-steps 40000
+    cp outputs/phase2_realdata_results.csv outputs/phase2_realdata_theoph.csv 2>/dev/null \
+        || cp phase2_realdata_results.csv phase2_realdata_theoph.csv
+    echo "Saved -> phase2_realdata_theoph.csv (CSV-overwrite gotcha -- see README)"
 }
 
 realdata_warfarin() {
     # Requires warfarin.csv already exported from R -- see README, no
     # compilation needed for the export itself (nlmixr2data is a pure
-    # data package).
+    # data package). Real columns are LOWERCASE (id/time/dv/amt/dvid/evid),
+    # confirmed against nlmixr2's own docs -- NOT uppercase ID/TIME/DV/AMT.
+    # Also requires filtering to dvid=='cp' (the PK endpoint) FIRST --
+    # warfarin is a multi-endpoint file (283 PK rows + 232 PD/'pca' rows in
+    # the same table); skipping this silently mixes PK and PD observations
+    # into one "concentration" column.
     local csv="${1:-warfarin.csv}"
     if [[ ! -f "$csv" ]]; then
         echo "Missing $csv. In R first:"
@@ -78,8 +107,19 @@ realdata_warfarin() {
         echo "Then check column names with: head -3 $csv"
         return 1
     fi
-    uv run phase2/nlme_vi_phase2_realdata.py --csv "$csv" \
-        --col-map "ID=subject,TIME=time,DV=conc,AMT=dose" --K 1,64 --max-steps 40000
+    local pk_csv="${csv%.csv}_pk.csv"
+    python3 -c "
+import pandas as pd
+df = pd.read_csv('$csv')
+pk = df[df.dvid == 'cp']
+pk.to_csv('$pk_csv', index=False)
+print(f'{len(pk)} PK rows extracted -> $pk_csv (expect 283 for the standard dataset)')
+"
+    uv run phase2/nlme_vi_phase2_realdata.py --csv "$pk_csv" \
+        --col-map "id=subject,time=time,dv=conc,amt=dose" --K 1,64 --max-steps 40000
+    cp outputs/phase2_realdata_results.csv outputs/phase2_realdata_warfarin.csv 2>/dev/null \
+        || cp phase2_realdata_results.csv phase2_realdata_warfarin.csv
+    echo "Saved -> phase2_realdata_warfarin.csv (CSV-overwrite gotcha -- see README)"
 }
 
 realdata_nscaling() {
@@ -100,6 +140,9 @@ deltaofv_free() {
     local workers; workers=$(( $(n_cores) - 1 ))
     $(maybe_caffeinate) uv run phase2/nlme_vi_phase2_deltaofv.py \
         --reps 100 --subjects 120 --K 64 --n-workers "$workers"
+    cp outputs/phase2_deltaofv_results.csv outputs/phase2_deltaofv_free.csv 2>/dev/null \
+        || cp phase2_deltaofv_results.csv phase2_deltaofv_free.csv
+    echo "Saved -> phase2_deltaofv_free.csv (CSV-overwrite gotcha -- see README)"
 }
 
 deltaofv_amortized() {
@@ -107,13 +150,22 @@ deltaofv_amortized() {
     local workers; workers=$(( $(n_cores) - 1 ))
     $(maybe_caffeinate) uv run phase2/nlme_vi_phase2_deltaofv.py \
         --reps 100 --subjects 120 --K 64 --n-workers "$workers" --posterior amortized
+    cp outputs/phase2_deltaofv_results.csv outputs/phase2_deltaofv_amortized.csv 2>/dev/null \
+        || cp phase2_deltaofv_results.csv phase2_deltaofv_amortized.csv
+    echo "Saved -> phase2_deltaofv_amortized.csv (CSV-overwrite gotcha -- see README)"
 }
 
 deltaofv_amortized_confirmatory() {
-    # More reps for a decisively-powered KS test.
+    # More reps for a decisively-powered KS test. Note: at n=300 the KS
+    # p-value looks WORSE than n=100 (statistical power, not a regression --
+    # see README's deltaofv section for why the KS *statistic*, not the
+    # p-value, is the number to compare across sample sizes).
     local workers; workers=$(( $(n_cores) - 1 ))
     $(maybe_caffeinate) uv run phase2/nlme_vi_phase2_deltaofv.py \
         --reps 300 --subjects 120 --K 64 --n-workers "$workers" --posterior amortized
+    cp outputs/phase2_deltaofv_results.csv outputs/phase2_deltaofv_amortized_n300.csv 2>/dev/null \
+        || cp phase2_deltaofv_results.csv phase2_deltaofv_amortized_n300.csv
+    echo "Saved -> phase2_deltaofv_amortized_n300.csv (CSV-overwrite gotcha -- see README)"
 }
 
 deltaofv_evalk_test() {
@@ -144,6 +196,37 @@ baselines_r_direct() {
         return 1
     fi
     Rscript phase2/baseline_nlmixr2.R "$csv" /tmp/test_foce.csv foce
+}
+
+# ===================================================== Publication
+publication_tables() {
+    # Every flag is optional -- run with whatever CSVs you have saved so
+    # far (see the CSV-overwrite gotcha in the functions above); missing
+    # sources are skipped, not an error.
+    python publication/make_tables.py \
+        --phase0-csv outputs/phase0_results.csv \
+        --phase1-csv outputs/phase1_results.csv \
+        --nonlinear-csv outputs/phase1_nonlinear_results.csv \
+        --theoph-csv outputs/phase2_realdata_theoph.csv \
+        --warfarin-csv outputs/phase2_realdata_warfarin.csv \
+        --deltaofv-free-csv outputs/phase2_deltaofv_free.csv \
+        --deltaofv-amortized-csv outputs/phase2_deltaofv_amortized_n300.csv \
+        --psis-csv outputs/phase2_psis_results.csv \
+        --baseline-csv outputs/phase2_baseline_comparison.csv \
+        --out publication/tables
+}
+
+publication_figures() {
+    python publication/make_figures.py \
+        --phase0-csv outputs/phase0_results.csv \
+        --phase1-csv outputs/phase1_results.csv \
+        --nonlinear-csv outputs/phase1_nonlinear_results.csv \
+        --theoph-csv outputs/phase2_realdata_theoph.csv \
+        --warfarin-csv outputs/phase2_realdata_warfarin.csv \
+        --deltaofv-free-csv outputs/phase2_deltaofv_free.csv \
+        --deltaofv-amortized-csv outputs/phase2_deltaofv_amortized_n300.csv \
+        --psis-csv outputs/phase2_psis_results.csv \
+        --out publication/figures
 }
 
 # --------------------------------------------------------------- dispatch
