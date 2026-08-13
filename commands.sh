@@ -67,14 +67,16 @@ phase1_nonlinear_check() {
 phase1_nonlinear_production() {
     # The real run. Model/design are finalized (see README Key Finding 6:
     # OneCmtIVBolusMMNoKmRE, dose=300, 60h window -- baked into
-    # get_scenario(), not exposed as flags here). Expect several hours even
-    # with parallelism -- see README's cost estimate. flow/amortized+flow
-    # deliberately excluded: flow was never validated on this tier, and
-    # amortized+flow's known instability (every K, see Key Finding 3) makes
-    # it not worth risking in an expensive unattended run.
+    # get_scenario(), not exposed as flags here). free+gaussian ONLY --
+    # amortized+gaussian was tested at full scale and failed
+    # catastrophically on this tier (bias +230% to +1168%, worsening with
+    # K; a NEW instability, distinct from amortized+flow). flow was never
+    # tested here and is excluded for the same reason as always (unproven
+    # + amortized+flow's known instability elsewhere makes any amortized
+    # combination worth extra caution on this tier specifically).
     local workers; workers=$(( $(n_cores) - 1 ))
     $(maybe_caffeinate) python nlme_vi_phase1.py --scenarios nonlinear \
-        --families gaussian --posteriors free,amortized \
+        --families gaussian --posteriors free \
         --nl-reps 20 --nl-subjects 60 --mm-dt 0.1 --n-workers "$workers" --out .
     echo ""
     echo "IMPORTANT: copy phase1_results.csv to a distinct name now, e.g.:"

@@ -101,17 +101,37 @@ of this pipeline.
    training duration or design changes -- consistent with a genuine
    structural instability, not undertraining or a fixable design flaw.
    With Km's IIV removed (`OneCmtIVBolusMMNoKmRE`), fixed effects recover
-   cleanly (Vmax/Km/V bias within about -12% to +9%) and the same
-   K=1-vs-K=64 shrinkage-and-correction signature seen everywhere else in
-   this project reproduces on Vmax and V's omegas (exploratory N=15 test:
-   -46% at K=1 -> -37% at K=64). The observation window matters more than
-   it might look: it's needed not for Km's IIV (correctly removed) but for
-   identifying Km's *population-level* fixed effect at all -- a shortened
-   24h window was tested and found genuinely broken (Km +482% bias, not
-   just undertrained), because concentration never leaves the fully
-   saturated MM regime in that window, where the equation is structurally
-   insensitive to Km. The full production grid at real scale (N=60) was
-   in progress as of this writing -- see Known Issues for status.
+   cleanly and the same K=1-vs-K=64 shrinkage-and-correction signature seen
+   everywhere else in this project reproduces on Vmax and V's omegas.
+   **Confirmed at full production scale (N=60, 20 reps, K=1/8/64):
+   free+gaussian is clean and complete** -- Omega bias -1.79% (K=1) ->
+   -0.47% (K=8) -> -0.04% (K=64), closing almost entirely, even better
+   than the N=15 exploratory runs suggested (consistent with the
+   small-sample-bias mechanism established elsewhere in this project: the
+   correction gets cleaner as N grows). **This is the reportable
+   nonlinear-tier headline result.**
+   **Separately, and unexpectedly: amortized+gaussian failed
+   catastrophically on this tier** -- bias +230% (K=1) -> +374% (K=8) ->
+   +1168% (K=64), *worsening* with more K rather than correcting (26/120
+   fits non-converged, 33/120 QC-outlier-flagged, some fixed-effect
+   estimates reaching numerically absurd values, e.g. Km ~ 2*10^7). This
+   is a NEW, previously uncharacterized failure, distinct from
+   amortized+flow's known instability (Finding 3) -- no flow is involved
+   here at all, so that mechanism doesn't apply. Leading (untested)
+   hypothesis: the amortized encoder must learn one shared mapping from
+   raw trajectory shape to (mu, log_s) across all subjects at once; this
+   tier's design deliberately spans saturated/transition/first-order MM
+   regimes (required to identify Vmax -- see above), so subject
+   trajectories vary far more in shape than on the linear tier, which may
+   be a harder generalization problem for a shared encoder than the free
+   posterior's independently-optimized-per-subject approach. Not
+   investigated further -- free+gaussian already fully answers Q3.
+   **Important process note**: amortized+gaussian was never validated at
+   small scale on this tier before the production run -- every prior
+   exploratory check used `--posteriors free` only. This is a real gap in
+   following this project's own established discipline of testing cheap
+   before committing to an expensive run, worth remembering for any future
+   tier/combination.
 
 ---
 
@@ -684,12 +704,19 @@ ignore the file entirely and type your own command.
   rate, confirmed NOT the primary driver of the residual gap above, but a
   separate quality issue worth its own fix (likely needs higher
   `--max-steps` for this specific combination -- not yet tried).
-- **Nonlinear tier production run**: in progress as of this writing (N=60,
-  full K/posterior grid, parallelized). The model/design questions
-  themselves are resolved (see Key Finding 6) -- what's outstanding is
-  just the actual production numbers landing. Once complete, save the CSV
-  under a distinct name before running anything else in that directory
-  (see the CSV-overwrite gotcha below).
+- **Nonlinear tier production run**: COMPLETE. free+gaussian is the clean,
+  reportable result (see Key Finding 6). amortized+gaussian failed
+  catastrophically and is excluded from headline results -- a new
+  instability, not the already-known amortized+flow one. Not investigated
+  further; free+gaussian alone answers Q3. `commands.sh`'s
+  `phase1_nonlinear_production` restricts to `--posteriors free` for this
+  reason (previously ran both).
+- **Runtime, for future planning**: 120 fits, 9-way parallel, ~88 CPU-hours
+  total, ~10-11 hours real elapsed time -- consistent with the cost model's
+  prediction (5-24h). The failed amortized cells cost roughly as much as
+  the successful free cells (non-convergence still runs the full
+  `--max-steps` budget), so excluding amortized going forward
+  meaningfully cuts future nonlinear-tier cost too, not just risk.
 - **CSV-overwrite gotcha (cross-cutting, applies to `nlme_vi_phase2_realdata.py`
   and `nlme_vi_phase2_deltaofv.py`)**: both scripts always write to the same
   default filename regardless of which condition (`--dataset`, `--posterior`)

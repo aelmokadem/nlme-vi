@@ -74,12 +74,12 @@ pd.concat([g, f], ignore_index=True).to_csv('$OUT/phase1_linear_combined.csv', i
 "
 
 # ============================================================ Phase 1: nonlinear tier
-echo -e "\n>>> Phase 1, Q3 nonlinear -- gaussian only, free+amortized. This is"
-echo "    the expensive step (see header). Flow deliberately excluded: never"
-echo "    validated on this tier, and not needed -- Vmax/V's shrinkage-and-"
-echo "    correction signature is already established via gaussian alone."
+echo -e "\n>>> Phase 1, Q3 nonlinear -- gaussian/free ONLY. Flow was never validated"
+echo "    on this tier. Amortized+gaussian was tested at full scale and FAILED"
+echo "    catastrophically (bias +230% to +1168%, worsening with K -- a new"
+echo "    instability distinct from amortized+flow, see README Key Finding 6)."
 $CAFFEINATE python nlme_vi_phase1.py --scenarios nonlinear --families gaussian \
-    --posteriors free,amortized --nl-reps 20 --nl-subjects 60 --mm-dt 0.1 \
+    --posteriors free --nl-reps 20 --nl-subjects 60 --mm-dt 0.1 \
     --n-workers "$WORKERS" --out "$OUT"
 cp "$OUT/phase1_results.csv" "$OUT/phase1_nonlinear_results.csv"
 
