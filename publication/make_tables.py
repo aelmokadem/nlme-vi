@@ -88,9 +88,17 @@ def try_load(path, label):
 
 # %% ------------------------------------------------------ table builders
 def table_phase0(df):
-    """Headline go/no-go: Omega bias by posterior x K."""
+    """Headline go/no-go: Omega bias by posterior x K x param.
+
+    Grouped by param (not just posterior x K): pooling om_CL/om_V/om_ka
+    together would mix qualitatively different parameters into one
+    mean_bias_pct/sd_bias_pct, inflating sd_bias_pct with cross-parameter
+    variation rather than reflecting replicate-to-replicate uncertainty
+    for a single parameter -- the fixed_effects companion table below was
+    already correctly grouped this way; this was the one place that
+    wasn't, now fixed to match."""
     om = df[df.param.str.startswith("om_")]
-    t = om.groupby(["posterior", "K"]).rel_bias_pct.agg(["mean", "std", "count"])
+    t = om.groupby(["posterior", "K", "param"]).rel_bias_pct.agg(["mean", "std", "count"])
     t.columns = ["mean_bias_pct", "sd_bias_pct", "n_estimates"]
     return t.round(2).reset_index()
 
@@ -107,11 +115,13 @@ def table_phase0_fixed_effects(df):
 
 
 def table_phase1_grid(df):
-    """Q2/Q4: Omega bias by scenario x posterior x family x K, linear
-    scenarios only (dense/sparse) -- nonlinear handled separately since it
-    has different parameter names and is typically run standalone."""
+    """Q2/Q4: Omega bias by scenario x posterior x family x K x param,
+    linear scenarios only (dense/sparse) -- nonlinear handled separately
+    since it has different parameter names and is typically run
+    standalone. Grouped by param for the same reason as table_phase0
+    above -- see its docstring."""
     om = df[(df.param.str.startswith("om_")) & (df.scenario.isin(["dense", "sparse"]))]
-    t = om.groupby(["scenario", "posterior", "family", "K"]).rel_bias_pct.agg(
+    t = om.groupby(["scenario", "posterior", "family", "K", "param"]).rel_bias_pct.agg(
         ["mean", "std", "count"])
     t.columns = ["mean_bias_pct", "sd_bias_pct", "n_estimates"]
     return t.round(2).reset_index()

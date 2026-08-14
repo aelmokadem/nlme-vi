@@ -1,8 +1,20 @@
-| index | posterior | K | mean_bias_pct | sd_bias_pct | n_estimates |
-| --- | --- | --- | --- | --- | --- |
-| 0 | amortized | 1 | -20.67 | 35.92 | 24 |
-| 1 | amortized | 8 | -7.38 | 14.63 | 24 |
-| 2 | amortized | 64 | -4.2 | 12.0 | 24 |
-| 3 | free | 1 | -19.34 | 36.29 | 24 |
-| 4 | free | 8 | -7.63 | 14.28 | 24 |
-| 5 | free | 64 | -3.54 | 11.12 | 24 |
+| index | posterior | K | param | mean_bias_pct | sd_bias_pct | n_estimates |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | amortized | 1 | om_CL | -0.71 | 5.91 | 8 |
+| 1 | amortized | 1 | om_V | -47.83 | 39.58 | 8 |
+| 2 | amortized | 1 | om_ka | -13.45 | 35.79 | 8 |
+| 3 | amortized | 8 | om_CL | 0.17 | 7.51 | 8 |
+| 4 | amortized | 8 | om_V | -16.5 | 14.09 | 8 |
+| 5 | amortized | 8 | om_ka | -5.79 | 16.88 | 8 |
+| 6 | amortized | 64 | om_CL | -0.33 | 7.05 | 8 |
+| 7 | amortized | 64 | om_V | -9.67 | 13.43 | 8 |
+| 8 | amortized | 64 | om_ka | -2.61 | 13.74 | 8 |
+| 9 | free | 1 | om_CL | -1.67 | 6.34 | 8 |
+| 10 | free | 1 | om_V | -47.43 | 42.03 | 8 |
+| 11 | free | 1 | om_ka | -8.91 | 33.74 | 8 |
+| 12 | free | 8 | om_CL | 0.25 | 7.49 | 8 |
+| 13 | free | 8 | om_V | -16.38 | 13.58 | 8 |
+| 14 | free | 8 | om_ka | -6.75 | 16.45 | 8 |
+| 15 | free | 64 | om_CL | 0.42 | 7.43 | 8 |
+| 16 | free | 64 | om_V | -9.0 | 12.25 | 8 |
+| 17 | free | 64 | om_ka | -2.03 | 12.11 | 8 |
