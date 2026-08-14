@@ -1,207 +1,80 @@
-#!/usr/bin/env Rscript
-
 # publication/make_tables.R
 #
-# Manuscript tables from the project's result CSVs.
+# Generate manuscript tables from the project's result CSVs.
 #
-# This version:
-#   - uses here::here() for explicit project-root-relative paths
-#   - provides sensible default input paths
-#   - still allows command-line overrides
-#   - skips missing files cleanly
-#   - prints resolved paths
-#   - writes CSV + Markdown versions of each table
+# WHY EXPLICIT FILE PATHS:
+# Several analysis scripts write to fixed default filenames regardless of
+# condition. Running a second condition can therefore overwrite the first.
 #
-# Run directly:
+# This script never guesses which file corresponds to which condition.
+# Each source file is specified explicitly below. If a file is not supplied
+# or does not exist, the corresponding table is skipped.
 #
-#   Rscript publication/make_tables.R
+# OUTPUT:
+#   publication/tables/
+#       table_phase0_headline.csv
+#       table_phase0_headline.md
+#       ...
 #
-# Or override selected paths:
-#
-#   Rscript publication/make_tables.R \
-#     --phase0-csv outputs/phase0_results.csv \
-#     --out publication/tables
+# Dependencies:
+#   tidyverse
+#   here
 
 
-# =========================================================================
-# PACKAGES
-# =========================================================================
+# -------------------------------------------------------------------------
+# Packages
+# -------------------------------------------------------------------------
 
-library(dplyr)
-library(tidyr)
-library(readr)
+library(tidyverse)
 library(here)
 
 
-# =========================================================================
-# PATH HELPERS
-# =========================================================================
+# -------------------------------------------------------------------------
+# Input paths
+# -------------------------------------------------------------------------
+#
+# Set a path to NULL if that analysis has not yet been run.
+#
+# here() makes all paths relative to the project root rather than the
+# current working directory.
 
-resolve_project_path <- function(path) {
+phase0_csv <- here("outputs", "phase0_results.csv")
 
-  if (is.null(path) || !nzchar(path)) {
-    return(NULL)
-  }
+phase1_csv <- here("outputs", "phase1_results.csv")
 
-  # Leave absolute paths unchanged.
-  if (
-    grepl("^/", path) ||
-    grepl("^[A-Za-z]:[/\\\\]", path)
-  ) {
-    return(path)
-  }
+nonlinear_csv <- here("outputs", "phase1_nonlinear_results.csv")
 
-  # Otherwise interpret paths relative to the project root.
-  here(path)
-}
+theoph_csv <- here("outputs", "phase2_realdata_theoph.csv")
 
+warfarin_csv <- here("outputs", "phase2_realdata_warfarin.csv")
 
-# =========================================================================
-# COMMAND-LINE ARGUMENTS
-# =========================================================================
+deltaofv_free_csv <- here("outputs", "phase2_deltaofv_free.csv")
 
-parse_args <- function() {
+deltaofv_amortized_csv <- here("outputs", "phase2_deltaofv_amortized.csv")
 
-  cli <- commandArgs(trailingOnly = TRUE)
+psis_csv <- here("outputs", "phase2_psis_results.csv")
 
-  # Default project-root-relative locations.
-  #
-  # This allows the script to be run directly without supplying any flags.
-  args <- list(
-    phase0_csv = here(
-      "outputs",
-      "phase0_results.csv"
-    ),
-
-    phase1_csv = here(
-      "outputs",
-      "phase1_results.csv"
-    ),
-
-    nonlinear_csv = here(
-      "outputs",
-      "phase1_nonlinear_results.csv"
-    ),
-
-    theoph_csv = here(
-      "outputs",
-      "phase2_realdata_theoph.csv"
-    ),
-
-    warfarin_csv = here(
-      "outputs",
-      "phase2_realdata_warfarin.csv"
-    ),
-
-    deltaofv_free_csv = here(
-      "outputs",
-      "phase2_deltaofv_free.csv"
-    ),
-
-    deltaofv_amortized_csv = here(
-      "outputs",
-      "phase2_deltaofv_amortized.csv"
-    ),
-
-    psis_csv = here(
-      "outputs",
-      "phase2_psis_results.csv"
-    ),
-
-    baseline_csv = here(
-      "outputs",
-      "phase2_baseline_comparison.csv"
-    ),
-
-    out = here(
-      "publication",
-      "tables"
-    )
-  )
+baseline_csv <- here("outputs", "phase2_baseline_comparison.csv")
 
 
-  flag_map <- c(
-    "--phase0-csv" = "phase0_csv",
-    "--phase1-csv" = "phase1_csv",
-    "--nonlinear-csv" = "nonlinear_csv",
-    "--theoph-csv" = "theoph_csv",
-    "--warfarin-csv" = "warfarin_csv",
-    "--deltaofv-free-csv" = "deltaofv_free_csv",
-    "--deltaofv-amortized-csv" = "deltaofv_amortized_csv",
-    "--psis-csv" = "psis_csv",
-    "--baseline-csv" = "baseline_csv",
-    "--out" = "out"
-  )
+# Output directory
+
+out_dir <- here("publication", "tables")
 
 
-  i <- 1
-
-  while (i <= length(cli)) {
-
-    flag <- cli[i]
-
-    if (!(flag %in% names(flag_map))) {
-
-      warning(
-        "Unknown argument: ",
-        flag
-      )
-
-      i <- i + 1
-      next
-    }
-
-    if (i == length(cli)) {
-
-      stop(
-        "Missing value after ",
-        flag
-      )
-    }
-
-    key <- flag_map[[flag]]
-
-    args[[key]] <- resolve_project_path(
-      cli[i + 1]
-    )
-
-    i <- i + 2
-  }
-
-  args
-}
-
-
-# =========================================================================
-# UTILITIES
-# =========================================================================
+# -------------------------------------------------------------------------
+# Utilities
+# -------------------------------------------------------------------------
 
 try_load <- function(path, label) {
 
-  if (is.null(path)) {
-
-    message(
-      "[skip] ",
-      label,
-      ": no path given"
-    )
-
+  if (is.null(path) || is.na(path) || path == "") {
+    message("\n[skip] ", label, ": no path given")
     return(NULL)
   }
 
   if (!file.exists(path)) {
-
-    message(
-      "[skip] ",
-      label,
-      ": ",
-      normalizePath(
-        path,
-        mustWork = FALSE
-      ),
-      " not found"
-    )
-
+    message("\n[skip] ", label, ": ", path, " not found")
     return(NULL)
   }
 
@@ -211,10 +84,10 @@ try_load <- function(path, label) {
   )
 
   message(
-    "[loaded] ",
+    "\n[loaded] ",
     label,
     ": ",
-    normalizePath(path),
+    path,
     " (",
     nrow(df),
     " rows)"
@@ -224,69 +97,44 @@ try_load <- function(path, label) {
 }
 
 
-# =========================================================================
-# MARKDOWN TABLE WRITER
-# =========================================================================
+# Convert a data frame to a simple Markdown table.
+#
+# This avoids introducing another package dependency just for Markdown
+# output.
 
 df_to_markdown <- function(df) {
 
-  if (ncol(df) == 0) {
-    return("")
-  }
+  df <- as.data.frame(df)
 
-  format_cell <- function(x) {
+  format_value <- function(x) {
 
     if (is.na(x)) {
       return("NA")
     }
 
-    x <- as.character(x)
-
-    # Escape pipes so values cannot break the Markdown table.
-    gsub(
-      "\\|",
-      "\\\\|",
-      x
-    )
+    as.character(x)
   }
-
 
   header <- paste0(
     "| ",
-    paste(
-      names(df),
-      collapse = " | "
-    ),
+    paste(names(df), collapse = " | "),
     " |"
   )
-
 
   separator <- paste0(
     "| ",
-    paste(
-      rep(
-        "---",
-        ncol(df)
-      ),
-      collapse = " | "
-    ),
+    paste(rep("---", ncol(df)), collapse = " | "),
     " |"
   )
-
 
   rows <- apply(
     df,
     1,
     function(row) {
-
       paste0(
         "| ",
         paste(
-          vapply(
-            row,
-            format_cell,
-            character(1)
-          ),
+          map_chr(row, format_value),
           collapse = " | "
         ),
         " |"
@@ -294,27 +142,14 @@ df_to_markdown <- function(df) {
     }
   )
 
-
   paste(
-    c(
-      header,
-      separator,
-      rows
-    ),
+    c(header, separator, rows),
     collapse = "\n"
   )
 }
 
 
-# =========================================================================
-# SAVE TABLE
-# =========================================================================
-
-save_table <- function(
-    df,
-    name,
-    out_dir
-) {
+save_table <- function(df, name, out_dir = out_dir) {
 
   dir.create(
     out_dir,
@@ -322,47 +157,28 @@ save_table <- function(
     showWarnings = FALSE
   )
 
-
   csv_path <- file.path(
     out_dir,
-    paste0(
-      name,
-      ".csv"
-    )
+    paste0(name, ".csv")
   )
-
 
   md_path <- file.path(
     out_dir,
-    paste0(
-      name,
-      ".md"
-    )
+    paste0(name, ".md")
   )
-
 
   write_csv(
     df,
     csv_path,
-    na = ""
+    na = "NA"
   )
-
 
   writeLines(
     df_to_markdown(df),
     md_path
   )
 
-
-  cat("\n")
-
-  cat(
-    "=== ",
-    name,
-    " ===\n",
-    sep = ""
-  )
-
+  cat("\n=== ", name, " ===\n", sep = "")
 
   print(
     df,
@@ -370,142 +186,155 @@ save_table <- function(
     width = Inf
   )
 
-
-  message(
-    "  -> ",
-    normalizePath(
-      csv_path,
-      mustWork = FALSE
-    )
-  )
-
-  message(
-    "  -> ",
-    normalizePath(
-      md_path,
-      mustWork = FALSE
-    )
+  cat(
+    "\n-> ", csv_path,
+    "\n-> ", md_path,
+    "\n",
+    sep = ""
   )
 }
 
 
-# =========================================================================
-# TABLE 1: PHASE 0
-# =========================================================================
+# -------------------------------------------------------------------------
+# Table 1: Phase 0 omega bias
+# -------------------------------------------------------------------------
 
 table_phase0 <- function(df) {
 
   df %>%
     filter(
-      startsWith(
-        param,
-        "om_"
-      )
+      str_starts(param, "om_")
     ) %>%
     group_by(
       posterior,
-      K
+      K,
+      param
     ) %>%
     summarise(
-      mean_bias_pct = mean(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-
-      sd_bias_pct = sd(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-
-      n_estimates = sum(
-        !is.na(rel_bias_pct)
-      ),
-
+      mean_bias_pct = mean(rel_bias_pct, na.rm = TRUE),
+      sd_bias_pct = sd(rel_bias_pct, na.rm = TRUE),
+      n_estimates = sum(!is.na(rel_bias_pct)),
       .groups = "drop"
     ) %>%
     mutate(
       across(
-        c(
-          mean_bias_pct,
-          sd_bias_pct
-        ),
+        c(mean_bias_pct, sd_bias_pct),
         ~ round(.x, 2)
       )
     )
 }
 
 
-# =========================================================================
-# TABLE 2: PHASE 1 GRID
-# =========================================================================
+# -------------------------------------------------------------------------
+# Phase 0 fixed effects companion table
+# -------------------------------------------------------------------------
+
+table_phase0_fixed_effects <- function(df) {
+
+  df %>%
+    filter(
+      !str_starts(param, "om_")
+    ) %>%
+    group_by(
+      posterior,
+      K,
+      param
+    ) %>%
+    summarise(
+      mean_bias_pct = mean(rel_bias_pct, na.rm = TRUE),
+      sd_bias_pct = sd(rel_bias_pct, na.rm = TRUE),
+      n_estimates = sum(!is.na(rel_bias_pct)),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      across(
+        c(mean_bias_pct, sd_bias_pct),
+        ~ round(.x, 2)
+      )
+    )
+}
+
+
+# -------------------------------------------------------------------------
+# Phase 1 Q2/Q4: omega bias
+# -------------------------------------------------------------------------
 
 table_phase1_grid <- function(df) {
 
   df %>%
     filter(
-      startsWith(
-        param,
-        "om_"
-      ),
-
-      scenario %in% c(
-        "dense",
-        "sparse"
-      )
+      str_starts(param, "om_"),
+      scenario %in% c("dense", "sparse")
     ) %>%
     group_by(
       scenario,
       posterior,
       family,
-      K
+      K,
+      param
     ) %>%
     summarise(
-      mean_bias_pct = mean(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-
-      sd_bias_pct = sd(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-
-      n_estimates = sum(
-        !is.na(rel_bias_pct)
-      ),
-
+      mean_bias_pct = mean(rel_bias_pct, na.rm = TRUE),
+      sd_bias_pct = sd(rel_bias_pct, na.rm = TRUE),
+      n_estimates = sum(!is.na(rel_bias_pct)),
       .groups = "drop"
     ) %>%
     mutate(
       across(
-        c(
-          mean_bias_pct,
-          sd_bias_pct
-        ),
+        c(mean_bias_pct, sd_bias_pct),
         ~ round(.x, 2)
       )
     )
 }
 
 
-# =========================================================================
-# TABLE 3: NONLINEAR
-# =========================================================================
+# -------------------------------------------------------------------------
+# Phase 1 Q2/Q4 fixed effects
+# -------------------------------------------------------------------------
+
+table_phase1_grid_fixed_effects <- function(df) {
+
+  df %>%
+    filter(
+      !str_starts(param, "om_"),
+      scenario %in% c("dense", "sparse")
+    ) %>%
+    group_by(
+      scenario,
+      posterior,
+      family,
+      K,
+      param
+    ) %>%
+    summarise(
+      mean_bias_pct = mean(rel_bias_pct, na.rm = TRUE),
+      sd_bias_pct = sd(rel_bias_pct, na.rm = TRUE),
+      n_estimates = sum(!is.na(rel_bias_pct)),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      across(
+        c(mean_bias_pct, sd_bias_pct),
+        ~ round(.x, 2)
+      )
+    )
+}
+
+
+# -------------------------------------------------------------------------
+# Phase 1 Q3: nonlinear model
+# -------------------------------------------------------------------------
 
 table_nonlinear <- function(df) {
 
-  nl <- df
-
   if ("scenario" %in% names(df)) {
-
-    nl <- df %>%
+    df <- df %>%
       filter(
         scenario == "nonlinear"
       )
   }
 
-
-  nl %>%
+  df %>%
     group_by(
       posterior,
       family,
@@ -513,78 +342,38 @@ table_nonlinear <- function(df) {
       param
     ) %>%
     summarise(
-      mean_estimate = mean(
-        estimate,
-        na.rm = TRUE
-      ),
-
-      truth = first(
-        truth
-      ),
-
-      mean_bias_pct = mean(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-
-      n = sum(
-        !is.na(rel_bias_pct)
-      ),
-
-      frac_converged = mean(
-        converged,
-        na.rm = TRUE
-      ),
-
+      mean_estimate = mean(estimate, na.rm = TRUE),
+      truth = first(truth),
+      mean_bias_pct = mean(rel_bias_pct, na.rm = TRUE),
+      n = sum(!is.na(rel_bias_pct)),
+      frac_converged = mean(converged, na.rm = TRUE),
       .groups = "drop"
     ) %>%
     mutate(
       across(
-        c(
-          mean_estimate,
-          truth,
-          mean_bias_pct,
-          frac_converged
-        ),
+        where(is.numeric),
         ~ round(.x, 3)
       )
     )
 }
 
 
-# =========================================================================
-# TABLE 4: REAL DATA
-# =========================================================================
+# -------------------------------------------------------------------------
+# Real data: K = 1 vs K = high
+# -------------------------------------------------------------------------
 
-table_realdata <- function(
-    df,
-    dataset_name
-) {
+table_realdata <- function(df, dataset_name) {
 
-  k_lo <- min(
-    df$K,
-    na.rm = TRUE
-  )
-
-  k_hi <- max(
-    df$K,
-    na.rm = TRUE
-  )
-
+  k_lo <- min(df$K, na.rm = TRUE)
+  k_hi <- max(df$K, na.rm = TRUE)
 
   lo <- df %>%
-    filter(
-      K == k_lo
-    ) %>%
+    filter(K == k_lo) %>%
     slice(1)
-
 
   hi <- df %>%
-    filter(
-      K == k_hi
-    ) %>%
+    filter(K == k_hi) %>%
     slice(1)
-
 
   candidate_params <- c(
     "CL",
@@ -596,126 +385,62 @@ table_realdata <- function(
     "sigma"
   )
 
-
   param_cols <- intersect(
     candidate_params,
     names(df)
   )
 
-
-  if (length(param_cols) == 0) {
-
-    warning(
-      "No recognized parameter columns found for ",
-      dataset_name
-    )
-
-    return(
-      tibble()
-    )
-  }
-
-
-  rows <- lapply(
+  map_dfr(
     param_cols,
     function(p) {
 
-      estimate_lo <- lo[[p]][1]
-      estimate_hi <- hi[[p]][1]
+      lo_est <- lo[[p]][1]
+      hi_est <- hi[[p]][1]
 
-
-      if (
-        is.na(estimate_hi) ||
-        estimate_hi == 0
-      ) {
-
-        rel <- NA_real_
-
-      } else {
-
-        rel <- 100 *
-          (
-            estimate_lo -
-              estimate_hi
-          ) /
-          estimate_hi
-      }
-
+      pct_diff <- ifelse(
+        is.na(hi_est) || hi_est == 0,
+        NA_real_,
+        100 * (lo_est - hi_est) / hi_est
+      )
 
       tibble(
         dataset = dataset_name,
-
         param = p,
-
         K_low = k_lo,
-
-        estimate_K_low = estimate_lo,
-
+        estimate_K_low = lo_est,
         K_high = k_hi,
-
-        estimate_K_high = estimate_hi,
-
-        pct_diff_low_vs_high = round(
-          rel,
-          2
-        )
+        estimate_K_high = hi_est,
+        pct_diff_low_vs_high = round(pct_diff, 2)
       )
     }
   )
-
-
-  bind_rows(rows)
 }
 
 
-# =========================================================================
-# TABLE 5: dOFV CALIBRATION
-# =========================================================================
+# -------------------------------------------------------------------------
+# dOFV calibration
+# -------------------------------------------------------------------------
 
-table_deltaofv_calibration <- function(
-    df,
-    label
-) {
+table_deltaofv_calibration <- function(df, label) {
 
   dofv <- df$dofv
 
-  dofv <- dofv[
-    !is.na(dofv)
-  ]
-
-
-  if (length(dofv) == 0) {
-
-    warning(
-      "No non-missing dOFV values for ",
-      label
-    )
-
-    return(
-      tibble()
-    )
-  }
-
-
-  frac_boundary <- 100 *
-    mean(
-      dofv <= 0.05
-    )
-
+  frac_boundary <- 100 * mean(
+    dofv <= 0.05,
+    na.rm = TRUE
+  )
 
   positive <- dofv[
-    dofv > 0.05
+    !is.na(dofv) &
+      dofv > 0.05
   ]
-
 
   if (length(positive) >= 10) {
 
-    ks_result <- suppressWarnings(
-      ks.test(
-        positive,
-        "pchisq",
-        df = 1
-      )
+    ks_result <- ks.test(
+      positive,
+      "pchisq",
+      df = 1
     )
 
     ks_stat <- unname(
@@ -730,67 +455,39 @@ table_deltaofv_calibration <- function(
     ks_p <- NA_real_
   }
 
-
-  # 50:50 mixture:
-  #
-  #   0.5 * point mass at zero
-  # + 0.5 * chi-square(df = 1)
-  #
-  # A 5% test for the mixture corresponds to the 90th percentile
-  # of chi-square(1).
+  # 90th percentile of chi-square(1), corresponding to the
+  # Self-Liang 50:50 mixture 95% test threshold.
 
   correct_cutoff <- qchisq(
     0.90,
     df = 1
   )
 
-
-  type1_correct <- 100 *
-    mean(
-      dofv > correct_cutoff
-    )
-
-
-  n_negative <- sum(
-    dofv < 0
+  type1_correct <- 100 * mean(
+    dofv > correct_cutoff,
+    na.rm = TRUE
   )
 
+  n_negative <- sum(
+    dofv < 0,
+    na.rm = TRUE
+  )
 
   tibble(
     condition = label,
-
-    n_reps = length(dofv),
-
-    boundary_fraction_pct = round(
-      frac_boundary,
-      1
-    ),
-
-    n_negative_dofv = as.integer(
-      n_negative
-    ),
-
-    ks_stat = round(
-      ks_stat,
-      4
-    ),
-
-    ks_p = round(
-      ks_p,
-      4
-    ),
-
-    type1_error_correct_test_pct = round(
-      type1_correct,
-      1
-    )
+    n_reps = sum(!is.na(dofv)),
+    boundary_fraction_pct = round(frac_boundary, 1),
+    n_negative_dofv = n_negative,
+    ks_stat = round(ks_stat, 4),
+    ks_p = round(ks_p, 4),
+    type1_error_correct_test_pct = round(type1_correct, 1)
   )
 }
 
 
-# =========================================================================
-# TABLE 6: PSIS / ESS
-# =========================================================================
+# -------------------------------------------------------------------------
+# PSIS / ESS
+# -------------------------------------------------------------------------
 
 table_psis <- function(df) {
 
@@ -799,49 +496,28 @@ table_psis <- function(df) {
       arm
     ) %>%
     summarise(
-      mean = mean(
-        ess,
-        na.rm = TRUE
-      ),
-
-      median = median(
-        ess,
-        na.rm = TRUE
-      ),
-
-      min = min(
-        ess,
-        na.rm = TRUE
-      ),
-
-      max = max(
-        ess,
-        na.rm = TRUE
-      ),
-
+      mean = mean(ess, na.rm = TRUE),
+      median = median(ess, na.rm = TRUE),
+      min = min(ess, na.rm = TRUE),
+      max = max(ess, na.rm = TRUE),
       .groups = "drop"
     ) %>%
     mutate(
       across(
-        c(
-          mean,
-          median,
-          min,
-          max
-        ),
+        c(mean, median, min, max),
         ~ round(.x, 1)
       )
     )
 }
 
 
-# =========================================================================
-# TABLE 7: VI vs FOCEI vs SAEM
-# =========================================================================
+# -------------------------------------------------------------------------
+# VI vs FOCEI vs SAEM
+# -------------------------------------------------------------------------
 
 table_baseline_comparison <- function(df) {
 
-  candidate_params <- c(
+  candidate_cols <- c(
     "CL",
     "V",
     "ka",
@@ -851,23 +527,10 @@ table_baseline_comparison <- function(df) {
     "sigma"
   )
 
-
   param_cols <- intersect(
-    candidate_params,
+    candidate_cols,
     names(df)
   )
-
-
-  if (length(param_cols) == 0) {
-
-    stop(
-      paste(
-        "Baseline comparison file contains",
-        "none of the expected parameter columns."
-      )
-    )
-  }
-
 
   est <- df %>%
     group_by(
@@ -876,19 +539,62 @@ table_baseline_comparison <- function(df) {
     summarise(
       across(
         all_of(param_cols),
-        ~ mean(
-          .x,
-          na.rm = TRUE
-        )
+        ~ mean(.x, na.rm = TRUE)
       ),
-
       .groups = "drop"
     )
 
+  truth_cols <- paste0(
+    "truth_",
+    param_cols
+  )
 
-  # -----------------------------------------------------------------------
-  # Runtime
-  # -----------------------------------------------------------------------
+  truth_cols <- intersect(
+    truth_cols,
+    names(df)
+  )
+
+  if (length(truth_cols) > 0) {
+
+    truth_values <- df %>%
+      slice(1) %>%
+      select(
+        all_of(truth_cols)
+      )
+
+    names(truth_values) <- str_remove(
+      names(truth_values),
+      "^truth_"
+    )
+
+    truth_row <- tibble(
+      method = "TRUTH"
+    ) %>%
+      bind_cols(
+        truth_values
+      )
+
+    # Make sure truth row has the same parameter columns.
+    missing_cols <- setdiff(
+      param_cols,
+      names(truth_row)
+    )
+
+    for (col in missing_cols) {
+      truth_row[[col]] <- NA_real_
+    }
+
+    truth_row <- truth_row %>%
+      select(
+        method,
+        all_of(param_cols)
+      )
+
+    est <- bind_rows(
+      est,
+      truth_row
+    )
+  }
 
   if ("cpu_secs" %in% names(df)) {
 
@@ -897,19 +603,10 @@ table_baseline_comparison <- function(df) {
         method
       ) %>%
       summarise(
-        cpu_secs_mean = mean(
-          cpu_secs,
-          na.rm = TRUE
-        ),
-
-        cpu_secs_median = median(
-          cpu_secs,
-          na.rm = TRUE
-        ),
-
+        cpu_secs_mean = mean(cpu_secs, na.rm = TRUE),
+        cpu_secs_median = median(cpu_secs, na.rm = TRUE),
         .groups = "drop"
       )
-
 
     est <- est %>%
       left_join(
@@ -917,73 +614,6 @@ table_baseline_comparison <- function(df) {
         by = "method"
       )
   }
-
-
-  # -----------------------------------------------------------------------
-  # Truth row
-  # -----------------------------------------------------------------------
-
-  truth_names <- paste0(
-    "truth_",
-    param_cols
-  )
-
-
-  available_truth <- truth_names[
-    truth_names %in% names(df)
-  ]
-
-
-  if (length(available_truth) > 0) {
-
-    truth_row <- tibble(
-      method = "TRUTH"
-    )
-
-
-    for (p in param_cols) {
-
-      truth_col <- paste0(
-        "truth_",
-        p
-      )
-
-
-      if (truth_col %in% names(df)) {
-
-        truth_row[[p]] <- df[[truth_col]][1]
-
-      } else {
-
-        truth_row[[p]] <- NA_real_
-      }
-    }
-
-
-    if ("cpu_secs_mean" %in% names(est)) {
-      truth_row$cpu_secs_mean <- NA_real_
-    }
-
-
-    if ("cpu_secs_median" %in% names(est)) {
-      truth_row$cpu_secs_median <- NA_real_
-    }
-
-
-    truth_row <- truth_row %>%
-      select(
-        all_of(
-          names(est)
-        )
-      )
-
-
-    est <- bind_rows(
-      est,
-      truth_row
-    )
-  }
-
 
   est %>%
     mutate(
@@ -995,155 +625,104 @@ table_baseline_comparison <- function(df) {
 }
 
 
-# =========================================================================
-# MAIN
-# =========================================================================
-
-args <- parse_args()
-
+# -------------------------------------------------------------------------
+# Main
+# -------------------------------------------------------------------------
 
 cat(
-  strrep(
-    "=",
-    72
-  ),
-  "\n",
-  sep = ""
-)
-
-cat(
-  "MANUSCRIPT TABLES\n"
-)
-
-cat(
-  strrep(
-    "=",
-    72
-  ),
-  "\n\n",
-  sep = ""
+  paste0(
+    "\n",
+    str_dup("=", 72),
+    "\nMANUSCRIPT TABLES\n",
+    str_dup("=", 72),
+    "\n"
+  )
 )
 
 
-cat(
-  "Project root: ",
-  normalizePath(
-    here(),
-    mustWork = FALSE
-  ),
-  "\n",
-  sep = ""
-)
+# -------------------------------------------------------------------------
+# Phase 0
+# -------------------------------------------------------------------------
 
-
-cat(
-  "Working directory: ",
-  normalizePath(
-    getwd(),
-    mustWork = FALSE
-  ),
-  "\n",
-  sep = ""
-)
-
-
-cat(
-  "Table output directory: ",
-  normalizePath(
-    args$out,
-    mustWork = FALSE
-  ),
-  "\n\n",
-  sep = ""
-)
-
-
-dir.create(
-  args$out,
-  recursive = TRUE,
-  showWarnings = FALSE
-)
-
-
-# =========================================================================
-# PHASE 0
-# =========================================================================
-
-df <- try_load(
-  args$phase0_csv,
+df_phase0 <- try_load(
+  phase0_csv,
   "Phase 0 (go/no-go)"
 )
 
+if (!is.null(df_phase0)) {
 
-if (!is.null(df)) {
+  save_table(
+    table_phase0(df_phase0),
+    "table_phase0_headline"
+  )
 
-  tab <- table_phase0(df)
-
-  if (nrow(tab) > 0) {
-
-    save_table(
-      tab,
-      "table_phase0_headline",
-      args$out
-    )
-  }
+  save_table(
+    table_phase0_fixed_effects(df_phase0),
+    "table_phase0_fixed_effects"
+  )
 }
 
 
-# =========================================================================
-# PHASE 1 GRID
-# =========================================================================
+# -------------------------------------------------------------------------
+# Phase 1 Q2/Q4
+# -------------------------------------------------------------------------
 
-df <- try_load(
-  args$phase1_csv,
+df_phase1 <- try_load(
+  phase1_csv,
   "Phase 1 grid (Q2/Q4, linear)"
 )
 
+if (!is.null(df_phase1)) {
 
-if (!is.null(df)) {
+  save_table(
+    table_phase1_grid(df_phase1),
+    "table_phase1_q2q4"
+  )
 
-  tab <- table_phase1_grid(df)
-
-  if (nrow(tab) > 0) {
-
-    save_table(
-      tab,
-      "table_phase1_q2q4",
-      args$out
-    )
-  }
+  save_table(
+    table_phase1_grid_fixed_effects(df_phase1),
+    "table_phase1_q2q4_fixed_effects"
+  )
 }
 
 
-# =========================================================================
-# NONLINEAR
-# =========================================================================
+# -------------------------------------------------------------------------
+# Phase 1 Q3 nonlinear
+#
+# If nonlinear_csv does not exist, fall back to phase1_csv, matching the
+# Python script's nonlinear_csv OR phase1_csv behavior.
+# -------------------------------------------------------------------------
 
-df <- try_load(
-  args$nonlinear_csv,
+nonlinear_path <- if (
+  !is.null(nonlinear_csv) &&
+    file.exists(nonlinear_csv)
+) {
+  nonlinear_csv
+} else {
+  phase1_csv
+}
+
+df_nonlinear <- try_load(
+  nonlinear_path,
   "Phase 1 nonlinear (Q3)"
 )
 
+if (!is.null(df_nonlinear)) {
 
-if (!is.null(df)) {
-
-  has_nonlinear <-
-    !"scenario" %in% names(df) ||
-    "nonlinear" %in% df$scenario
-
+  has_nonlinear <- (
+    "scenario" %in% names(df_nonlinear) &&
+      any(
+        df_nonlinear$scenario == "nonlinear",
+        na.rm = TRUE
+      )
+  )
 
   if (has_nonlinear) {
 
-    tab <- table_nonlinear(df)
-
-    if (nrow(tab) > 0) {
-
-      save_table(
-        tab,
-        "table_phase1_q3_nonlinear",
-        args$out
-      )
-    }
+    save_table(
+      table_nonlinear(df_nonlinear),
+      "table_phase1_q3_nonlinear"
+    )
 
   } else {
 
@@ -1155,216 +734,161 @@ if (!is.null(df)) {
 }
 
 
-# =========================================================================
-# REAL DATA
-# =========================================================================
+# -------------------------------------------------------------------------
+# Real datasets
+# -------------------------------------------------------------------------
 
 realdata_tables <- list()
 
 
-df <- try_load(
-  args$theoph_csv,
+df_theoph <- try_load(
+  theoph_csv,
   "Real data: Theophylline"
 )
 
+if (!is.null(df_theoph)) {
 
-if (!is.null(df)) {
-
-  tab <- table_realdata(
-    df,
-    "theophylline"
+  realdata_tables <- append(
+    realdata_tables,
+    list(
+      table_realdata(
+        df_theoph,
+        "theophylline"
+      )
+    )
   )
-
-  if (nrow(tab) > 0) {
-
-    realdata_tables[[
-      length(realdata_tables) + 1
-    ]] <- tab
-  }
 }
 
 
-df <- try_load(
-  args$warfarin_csv,
-  "Real data: Warfarin"
+df_warfarin <- try_load(
+  warfarin_csv,
+  "Real data: warfarin"
 )
 
+if (!is.null(df_warfarin)) {
 
-if (!is.null(df)) {
-
-  tab <- table_realdata(
-    df,
-    "warfarin"
+  realdata_tables <- append(
+    realdata_tables,
+    list(
+      table_realdata(
+        df_warfarin,
+        "warfarin"
+      )
+    )
   )
-
-  if (nrow(tab) > 0) {
-
-    realdata_tables[[
-      length(realdata_tables) + 1
-    ]] <- tab
-  }
 }
 
 
 if (length(realdata_tables) > 0) {
 
   save_table(
-    bind_rows(
-      realdata_tables
-    ),
-    "table_realdata_k1_vs_khigh",
-    args$out
+    bind_rows(realdata_tables),
+    "table_realdata_k1_vs_khigh"
   )
 }
 
 
-# =========================================================================
-# dOFV CALIBRATION
-# =========================================================================
+# -------------------------------------------------------------------------
+# dOFV calibration
+# -------------------------------------------------------------------------
 
 calib_tables <- list()
 
 
-df <- try_load(
-  args$deltaofv_free_csv,
+df_deltaofv_free <- try_load(
+  deltaofv_free_csv,
   "dOFV calibration: free posterior"
 )
 
+if (!is.null(df_deltaofv_free)) {
 
-if (!is.null(df)) {
-
-  tab <- table_deltaofv_calibration(
-    df,
-    "free"
+  calib_tables <- append(
+    calib_tables,
+    list(
+      table_deltaofv_calibration(
+        df_deltaofv_free,
+        "free"
+      )
+    )
   )
-
-  if (nrow(tab) > 0) {
-
-    calib_tables[[
-      length(calib_tables) + 1
-    ]] <- tab
-  }
 }
 
 
-df <- try_load(
-  args$deltaofv_amortized_csv,
+df_deltaofv_amortized <- try_load(
+  deltaofv_amortized_csv,
   "dOFV calibration: amortized posterior"
 )
 
+if (!is.null(df_deltaofv_amortized)) {
 
-if (!is.null(df)) {
-
-  tab <- table_deltaofv_calibration(
-    df,
-    "amortized"
+  calib_tables <- append(
+    calib_tables,
+    list(
+      table_deltaofv_calibration(
+        df_deltaofv_amortized,
+        "amortized"
+      )
+    )
   )
-
-  if (nrow(tab) > 0) {
-
-    calib_tables[[
-      length(calib_tables) + 1
-    ]] <- tab
-  }
 }
 
 
 if (length(calib_tables) > 0) {
 
   save_table(
-    bind_rows(
-      calib_tables
-    ),
-    "table_deltaofv_calibration",
-    args$out
+    bind_rows(calib_tables),
+    "table_deltaofv_calibration"
   )
 }
 
 
-# =========================================================================
+# -------------------------------------------------------------------------
 # PSIS / ESS
-# =========================================================================
+# -------------------------------------------------------------------------
 
-df <- try_load(
-  args$psis_csv,
+df_psis <- try_load(
+  psis_csv,
   "PSIS/ESS diagnostic"
 )
 
-
-if (!is.null(df)) {
-
-  if (
-    all(
-      c(
-        "arm",
-        "ess"
-      ) %in% names(df)
-    )
-  ) {
-
-    save_table(
-      table_psis(df),
-      "table_psis_ess",
-      args$out
-    )
-
-  } else {
-
-    message(
-      "[skip] PSIS table: ",
-      "required columns 'arm' and/or 'ess' are missing"
-    )
-  }
-}
-
-
-# =========================================================================
-# VI vs FOCEI vs SAEM
-# =========================================================================
-
-df <- try_load(
-  args$baseline_csv,
-  "VI vs FOCEI vs SAEM"
-)
-
-
-if (!is.null(df)) {
+if (!is.null(df_psis)) {
 
   save_table(
-    table_baseline_comparison(df),
-    "table_baseline_comparison",
-    args$out
+    table_psis(df_psis),
+    "table_psis_ess"
   )
 }
 
 
-# =========================================================================
-# FINISH
-# =========================================================================
+# -------------------------------------------------------------------------
+# Baseline comparison
+# -------------------------------------------------------------------------
 
-cat("\n")
-
-cat(
-  strrep(
-    "=",
-    72
-  ),
-  "\n",
-  sep = ""
+df_baseline <- try_load(
+  baseline_csv,
+  "VI vs FOCEI vs SAEM"
 )
 
+if (!is.null(df_baseline)) {
+
+  save_table(
+    table_baseline_comparison(df_baseline),
+    "table_baseline_comparison"
+  )
+}
+
+
+# -------------------------------------------------------------------------
+# Done
+# -------------------------------------------------------------------------
 
 cat(
-  "Done.\n"
-)
-
-
-cat(
-  "Tables written to:\n",
-  normalizePath(
-    args$out,
-    mustWork = FALSE
-  ),
   "\n",
+  str_dup("=", 72),
+  "\n",
+  "Done. Tables written to:\n",
+  out_dir,
+  "/\n\n",
+  "Skipped tables simply mean the source was not supplied or was not found.\n",
   sep = ""
 )

@@ -16,9 +16,8 @@ NOTES TO SELF / FOR THE AUTHOR (delete before submission):
   make_tables.py already writes -- NOT hardcoded here -- so re-rendering
   this document after regenerating a table picks up the new numbers
   automatically. No code executes when this document renders.
-- Figures use the bare ![]() convention per your instruction (no caption
-  baked into the image syntax); the surrounding paragraph text serves as
-  the caption instead.
+- Figures and tables use Quarto cross-reference labels (`#fig-*` and
+  `#tbl-*`) so numbering/order is handled automatically at render time.
 - Every section marked [PLACEHOLDER: nlmixr2/NONMEM] is intentionally
   left for you to fill in once the FOCEI/SAEM baseline comparison is
   unblocked.
@@ -163,37 +162,38 @@ stating the runtime/accuracy comparison explicitly.]
 For a population of $N$ subjects, each subject $i$ contributes
 observations $y_{ij}$ at times $t_{ij}$, $j = 1, \ldots, n_i$, generated
 by a structural model $f$ evaluated at subject-specific parameters
-$\phi_i$:
+$\phi_i$ as in @eq-residual-error:
 
 $$
 y_{ij} = f(t_{ij}, \phi_i) \cdot \exp(\epsilon_{ij}), \qquad
 \epsilon_{ij} \sim \mathcal{N}(0, \sigma^2),
-$$
+$$ {#eq-residual-error}
 
 a log-normal (multiplicative) residual error model, equivalently additive
-on the log scale:
+on the log scale (@eq-log-residual-error):
 
 $$
 \log y_{ij} = \log f(t_{ij}, \phi_i) + \epsilon_{ij}.
-$$
+$$ {#eq-log-residual-error}
 
 Subject-specific parameters are linked to population-level fixed effects
 $\theta$ and subject-specific random effects $\eta_i$ through a
-log-normal population model,
+log-normal population model (@eq-population-model),
 
 $$
 \phi_i = \theta \odot \exp(\eta_i), \qquad
 \eta_i \sim \mathcal{N}(0, \Omega),
-$$
+$$ {#eq-population-model}
 
 with $\Omega$ diagonal (independent random effects) throughout this work.
 The population-level likelihood contribution of subject $i$ requires
-integrating the random effects out of the joint density,
+integrating the random effects out of the joint density
+(@eq-marginal-likelihood),
 
 $$
 p(y_i \mid \theta, \Omega, \sigma^2) =
 \int p(y_i \mid \phi_i, \sigma^2) \, p(\eta_i \mid \Omega) \, d\eta_i,
-$$
+$$ {#eq-marginal-likelihood}
 
 an integral with no closed form for any structural model $f$ beyond the
 simplest linear cases, and the central computational obstacle every NLME
@@ -201,7 +201,7 @@ estimation method must address.
 
 Variational inference replaces this integral with an optimization
 problem. For a tractable variational family $q_\lambda(\eta_i)$, the
-standard evidence lower bound (ELBO) satisfies
+standard evidence lower bound (ELBO) satisfies @eq-elbo:
 
 $$
 \log p(y_i \mid \theta, \Omega, \sigma^2) \;\geq\;
@@ -209,13 +209,14 @@ $$
 \Big[ \log p(y_i \mid \eta_i, \theta, \sigma^2) +
 \log p(\eta_i \mid \Omega) - \log q_\lambda(\eta_i) \Big]
 \;=:\; \mathrm{ELBO}_i(\lambda),
-$$
+$$ {#eq-elbo}
 
 and population parameters are estimated by maximizing
 $\sum_i \mathrm{ELBO}_i(\lambda_i)$ jointly over the variational
 parameters $\lambda_i$ and $(\theta, \Omega, \sigma^2)$. Because this
 bound need not be tight, we additionally use the $K$-sample
-importance-weighted ELBO (IW-ELBO) [@burda2016importance],
+importance-weighted ELBO (IW-ELBO) [@burda2016importance], defined in
+@eq-iw-elbo:
 
 $$
 \mathrm{ELBO}_i^{(K)}(\lambda) =
@@ -224,7 +225,7 @@ $$
 \left[ \log \frac{1}{K}\sum_{k=1}^{K}
 \frac{p(y_i, \eta_i^{(k)} \mid \theta, \Omega, \sigma^2)}
 {q_\lambda(\eta_i^{(k)})} \right],
-$$
+$$ {#eq-iw-elbo}
 
 which is provably a tighter lower bound for larger $K$ and converges to
 the true marginal log-likelihood as $K \to \infty$; $K=1$ recovers the
@@ -256,13 +257,13 @@ constructed via a conditional normalizing flow
 [@rezende2015variational; @papamakarios2021normalizing]. In the flow
 case, a latent variable $z_i \sim \mathcal{N}(0, I)$ is transformed by an
 invertible, differentiable map $h_\psi$ conditioned on the base
-posterior's parameters,
+posterior's parameters (@eq-flow-density),
 
 $$
 \eta_i = h_\psi(z_i \,;\, \mu_i, s_i), \qquad
 \log q(\eta_i) = \log \mathcal{N}(z_i; 0, I) -
 \log \left| \det \frac{\partial h_\psi}{\partial z_i} \right|,
-$$
+$$ {#eq-flow-density}
 
 allowing $q$ to represent non-Gaussian posterior shapes (skew,
 multimodality) that a diagonal Gaussian cannot. Crossing both design axes
@@ -295,12 +296,12 @@ widely spaced observations, to test whether the plain-ELBO bias
 interacts with the identifiability of the sampling schedule itself.
 
 **Nonlinear tier.** A one-compartment intravenous bolus model with
-saturable, Michaelis-Menten elimination,
+saturable, Michaelis-Menten elimination (@eq-michaelis-menten),
 
 $$
 \frac{dA}{dt} = -\frac{V_{max} \cdot (A/V)}{K_m + (A/V)}, \qquad
 A(0) = \mathrm{Dose},
-$$
+$$ {#eq-michaelis-menten}
 
 has no closed-form solution and is integrated numerically (fixed-step
 RK4) at every training step, providing a genuinely nonlinear test of
@@ -371,12 +372,12 @@ is valid for likelihood-ratio-based model comparison, we simulate data
 under a null hypothesis in which one random effect's variance is exactly
 zero, fit both a reduced model (without that random effect) and a full
 model (with it) to the identical simulated data, and compare the
-empirical distribution of
+empirical distribution of @eq-delta-ofv,
 
 $$
 \Delta\mathrm{OFV} = \mathrm{OFV}_{\text{reduced}} -
 \mathrm{OFV}_{\text{full}}
-$$
+$$ {#eq-delta-ofv}
 
 against its correct theoretical reference distribution. Testing a
 variance component against the boundary of its parameter space
@@ -384,12 +385,12 @@ variance component against the boundary of its parameter space
 the boundary constraint means the reduced model's likelihood exceeds the
 full model's roughly half the time by chance alone, and the correct
 asymptotic reference distribution is not $\chi^2_1$ but the Self-Liang
-boundary mixture [@self1987asymptotic],
+boundary mixture [@self1987asymptotic] in @eq-self-liang-mixture:
 
 $$
 \Delta\mathrm{OFV} \;\big|\; H_0 \;\sim\;
 \tfrac{1}{2}\,\delta_0 \;+\; \tfrac{1}{2}\,\chi^2_1,
-$$
+$$ {#eq-self-liang-mixture}
 
 a 50:50 mixture of a point mass at zero and a standard $\chi^2$ random
 variable with one degree of freedom. Calibrating against the naive
@@ -425,27 +426,27 @@ once finalized.]
 On the linear one-compartment model with known ground truth, plain-ELBO
 ($K=1$) fitting systematically underestimates $\Omega$ across both free
 and amortized posteriors, with the bias substantially reduced by
-importance-weighting ($K=64$). Fixed effects (clearance, volume,
+importance-weighting ($K=64$), as shown in @fig-phase0-omega-bias and
+summarized in @tbl-phase0-headline. Fixed effects (clearance, volume,
 absorption rate) show no corresponding bias at any $K$, confirming that
 the phenomenon is specific to variance-component estimation rather than
-a general estimation problem with the variational approach.
+a general estimation problem with the variational approach
+(@tbl-phase0-fixed-effects).
 
-![](publication/figures/fig_phase0_omega_bias.png)
-
-Omega bias by $K$, shown separately for free and amortized posteriors
+![Omega bias by $K$, shown separately for free and amortized posteriors
 under the Gaussian variational family. The dashed line marks zero bias.
-Error bars show the standard error across replicates.
+Error bars show the standard error across replicates.](publication/figures/fig_phase0_omega_bias.png){#fig-phase0-omega-bias}
 
 {{< include publication/tables/table_phase0_headline.md >}}
 
-: Mean relative bias (%) in $\Omega$ by posterior architecture and $K$.
+: Mean relative bias (%) in $\Omega$ by posterior architecture and $K$. {#tbl-phase0-headline}
 
 {{< include publication/tables/table_phase0_fixed_effects.md >}}
 
 : Mean relative bias (%) in fixed effects and residual error, by
 posterior architecture and $K$, as a validation check against the
 $\Omega$ table above: fixed effects are expected to remain near zero
-bias at every $K$, unlike $\Omega$.
+bias at every $K$, unlike $\Omega$. {#tbl-phase0-fixed-effects}
 
 ### Sparse Sampling Designs and Richer Variational Families
 
@@ -456,23 +457,23 @@ constrains shrinks the most under plain-ELBO training. Independently, a
 richer variational family (normalizing flow) closes most of the gap that
 importance-weighting alone leaves at low $K$, with the free posterior
 under the flow family showing negligible bias even at $K=1$ in the dense
-design.
+design (@fig-phase1-grid and @tbl-phase1-q2q4). Fixed-effect and
+residual-error estimates remain near the data-generating values across
+the same grid (@tbl-phase1-q2q4-fixed-effects).
 
-![](publication/figures/fig_phase1_grid.png)
-
-Omega bias by $K$, faceted by sampling design (rows) and variational
+![Omega bias by $K$, faceted by sampling design (rows) and variational
 family (columns), with one line per posterior architecture in each
-panel.
+panel.](publication/figures/fig_phase1_grid.png){#fig-phase1-grid}
 
 {{< include publication/tables/table_phase1_q2q4.md >}}
 
 : Mean relative bias (%) in $\Omega$ by sampling design, posterior
-architecture, variational family, and $K$.
+architecture, variational family, and $K$. {#tbl-phase1-q2q4}
 
 {{< include publication/tables/table_phase1_q2q4_fixed_effects.md >}}
 
 : Mean relative bias (%) in fixed effects and residual error, same
-grouping as above, as a validation check.
+grouping as above, as a validation check. {#tbl-phase1-q2q4-fixed-effects}
 
 One posterior configuration -- amortized posterior combined with the
 normalizing-flow family -- is unstable across every tested value of $K$
@@ -505,18 +506,17 @@ specific to variational inference. Restricting between-subject
 variability to $V_{max}$ and $V$ only, with $K_m$ retained as a
 population-level fixed effect, resolves this: fixed effects recover
 cleanly, and the same $K=1$-to-$K=64$ shrinkage-and-correction signature
-seen in the linear tier reproduces on $\Omega_{V_{max}}$ and $\Omega_V$.
+seen in the linear tier reproduces on $\Omega_{V_{max}}$ and $\Omega_V$
+(@fig-phase1-nonlinear and @tbl-phase1-q3-nonlinear).
 
-![](publication/figures/fig_phase1_nonlinear.png)
-
-Omega bias by $K$ for the Michaelis-Menten elimination model, free
+![Omega bias by $K$ for the Michaelis-Menten elimination model, free
 posterior, Gaussian family, restricted to $V_{max}$ and $V$ random
-effects.
+effects.](publication/figures/fig_phase1_nonlinear.png){#fig-phase1-nonlinear}
 
 {{< include publication/tables/table_phase1_q3_nonlinear.md >}}
 
 : Mean parameter estimates, ground-truth values, relative bias (%), and
-converged fraction for the Michaelis-Menten elimination model.
+converged fraction for the Michaelis-Menten elimination model. {#tbl-phase1-q3-nonlinear}
 
 We additionally tested the amortized posterior on this same nonlinear
 model and found a distinct, substantial instability -- not the
@@ -534,8 +534,10 @@ signature identified in simulation: $K=1$ reports smaller $\Omega$ than
 $K=64$ on the identical dataset, with the clearance random effect
 showing the least shrinkage of the three, consistent with clearance
 being the most robustly identified parameter throughout the simulated
-results above. On warfarin, fixed-effect estimates for clearance and
-volume of distribution fall inside the published 95% confidence
+results above (@fig-realdata-k1-vs-khigh and
+@tbl-realdata-k1-vs-khigh). On warfarin, fixed-effect estimates for
+clearance and volume of distribution fall inside the published 95%
+confidence
 intervals of an independently fitted FOCEI model on the same data
 [@fidler2019nonlinear] despite this work's simpler one-compartment,
 single-step absorption structure versus the published model's two-step
@@ -543,35 +545,32 @@ transit-compartment absorption -- a real, external agreement on the
 parameters that should agree given the shared elimination structure,
 not merely a directional match.
 
-![](publication/figures/fig_realdata_k1_vs_khigh.png)
-
-Omega estimates at $K=1$ versus $K=64$ for each dataset, by parameter.
+![Omega estimates at $K=1$ versus $K=64$ for each dataset, by parameter.](publication/figures/fig_realdata_k1_vs_khigh.png){#fig-realdata-k1-vs-khigh}
 
 {{< include publication/tables/table_realdata_k1_vs_khigh.md >}}
 
 : Parameter estimates at $K=1$ versus $K=64$ for both real datasets, and
-their percent difference.
+their percent difference. {#tbl-realdata-k1-vs-khigh}
 
 ### Diagnosing Fit Quality via Effective Sample Size
 
 Mean importance-sampling effective sample size cleanly separates
 deliberately under-trained fits from well-converged fits on matched
-simulated data, supporting its use as a practical diagnostic on real data
-where no ground truth is available to check convergence directly. A
+simulated data (@fig-psis-ess and @tbl-psis-ess), supporting its use as
+a practical diagnostic on real data where no ground truth is available
+to check convergence directly. A
 fixed per-subject tail-count threshold does not separate the two groups
 as cleanly, reflecting genuine subject-to-subject variation in fit
 difficulty independent of overall training adequacy; we therefore
 recommend the aggregate (mean or median) ESS as the primary diagnostic,
 not a fixed per-subject threshold.
 
-![](publication/figures/fig_psis_ess.png)
-
-Per-subject effective sample size distribution, well-converged versus
-deliberately under-trained fits on identical data.
+![Per-subject effective sample size distribution, well-converged versus
+deliberately under-trained fits on identical data.](publication/figures/fig_psis_ess.png){#fig-psis-ess}
 
 {{< include publication/tables/table_psis_ess.md >}}
 
-: Aggregate effective sample size by fit-quality arm.
+: Aggregate effective sample size by fit-quality arm. {#tbl-psis-ess}
 
 ### Validity of the Recovered Likelihood for Model Selection
 
@@ -579,7 +578,8 @@ Likelihood-ratio tests built on the free posterior's recovered marginal
 likelihood are miscalibrated against the correct Self-Liang boundary
 mixture reference for testing whether a random effect's variance is
 zero, with substantially too few null replicates landing at the
-theoretical boundary. This is not explained by insufficient
+theoretical boundary (@fig-deltaofv-calibration and
+@tbl-deltaofv-calibration). This is not explained by insufficient
 post-hoc importance-sampling precision (increasing the post-hoc
 evaluation sample size by 5-fold left the calibration essentially
 unchanged, including a specific highly discrepant replicate's
@@ -598,18 +598,16 @@ which classical asymptotic theory (including the correct boundary-mixture
 reference) does not account for; an amortized posterior's shared encoder
 does not introduce this per-subject asymmetry.
 
-![](publication/figures/fig_deltaofv_calibration.png)
-
-Empirical $\Delta\mathrm{OFV}$ distribution under the null hypothesis,
+![Empirical $\Delta\mathrm{OFV}$ distribution under the null hypothesis,
 free versus amortized posterior, against the theoretical Self-Liang
-mixture reference density.
+mixture reference density.](publication/figures/fig_deltaofv_calibration.png){#fig-deltaofv-calibration}
 
 {{< include publication/tables/table_deltaofv_calibration.md >}}
 
 : $\Delta\mathrm{OFV}$ calibration summary: boundary fraction,
 Kolmogorov-Smirnov statistic and p-value against $\chi^2_1$ for the
 strictly-positive replicates, and empirical type-I error of the correct
-boundary-mixture test.
+boundary-mixture test. {#tbl-deltaofv-calibration}
 
 This finding is scoped specifically to likelihood-ratio comparisons that
 change the number of random effects; it does not affect the $\Omega$-bias
