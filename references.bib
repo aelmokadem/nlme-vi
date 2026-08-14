@@ -1,0 +1,208 @@
+% ============================================================================
+% references.bib
+%
+% Confidence markers, left in comments above each entry -- please read
+% before submitting:
+%
+%   [VERIFIED]    Transcribed directly from a source document I had full
+%                 text access to in this conversation (the Arruda et al.
+%                 2024 paper itself, whose own reference list I copied
+%                 these from verbatim). High confidence.
+%
+%   [VERIFY]      From general knowledge, not a source I directly checked
+%                 in this conversation. Very likely correct in substance
+%                 (these are well-known papers/tools), but please confirm
+%                 exact page numbers / venue details before submission.
+%
+%   [PLACEHOLDER] You referenced these only by author surname, with no
+%                 year or venue given anywhere in our conversation. I did
+%                 NOT fabricate bibliographic details for these -- you
+%                 need to fill in the real citation. Search terms that
+%                 should find them: "variational inference nonlinear
+%                 mixed effects" / "amortized posterior population
+%                 pharmacokinetics".
+% ============================================================================
+
+
+% [VERIFIED] -- primary comparison paper, full text available
+@inproceedings{arruda2024amortized,
+  title     = {An amortized approach to non-linear mixed-effects modeling based on neural posterior estimation},
+  author    = {Arruda, Jonas and Schälte, Yannik and Peiter, Clemens and Teplytska, Olga and Jaehde, Ulrich and Hasenauer, Jan},
+  booktitle = {Proceedings of the 41st International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {235},
+  year      = {2024},
+  publisher = {PMLR},
+  address   = {Vienna, Austria}
+}
+
+% [VERIFIED] -- transcribed from Arruda et al. 2024's own reference list
+@phdthesis{pinheiro1994topics,
+  title  = {Topics in mixed effects models},
+  author = {Pinheiro, Jos{\'e} C.},
+  school = {University of Wisconsin, Madison},
+  year   = {1994},
+  address = {Madison, USA}
+}
+
+% [VERIFIED] -- transcribed from Arruda et al. 2024's own reference list
+@article{beal1980nonmem,
+  title   = {The {NONMEM} system},
+  author  = {Beal, Stuart and Sheiner, Lewis},
+  journal = {The American Statistician},
+  volume  = {34},
+  number  = {2},
+  pages   = {118--119},
+  year    = {1980}
+}
+
+% [VERIFIED] -- transcribed from Arruda et al. 2024's own reference list
+@article{wang2008derivation,
+  title   = {Derivation of various {NONMEM} estimation methods},
+  author  = {Wang, Yaning},
+  journal = {Journal of Pharmacokinetics and Pharmacodynamics},
+  volume  = {35},
+  number  = {2},
+  pages   = {249--249},
+  year    = {2008}
+}
+
+% [VERIFIED] -- transcribed from Arruda et al. 2024's own reference list
+@article{kuhn2005maximum,
+  title   = {Maximum likelihood estimation in nonlinear mixed effects models},
+  author  = {Kuhn, Estelle and Lavielle, Marc},
+  journal = {Computational Statistics \& Data Analysis},
+  volume  = {49},
+  number  = {4},
+  pages   = {1020--1038},
+  year    = {2005}
+}
+
+% [VERIFIED] -- transcribed from Arruda et al. 2024's own reference list
+@inproceedings{rezende2015variational,
+  title     = {Variational inference with normalizing flows},
+  author    = {Rezende, Danilo and Mohamed, Shakir},
+  booktitle = {International Conference on Machine Learning},
+  pages     = {1530--1538},
+  year      = {2015},
+  organization = {PMLR}
+}
+
+% [VERIFIED] -- transcribed from Arruda et al. 2024's own reference list
+@article{papamakarios2021normalizing,
+  title   = {Normalizing flows for probabilistic modeling and inference},
+  author  = {Papamakarios, George and Nalisnick, Eric T. and Rezende, Danilo Jimenez and Mohamed, Shakir and Lakshminarayanan, Balaji},
+  journal = {Journal of Machine Learning Research},
+  volume  = {22},
+  number  = {57},
+  pages   = {1--64},
+  year    = {2021}
+}
+
+% [VERIFIED] -- transcribed from Arruda et al. 2024's own reference list
+@article{rackauckas2017differentialequations,
+  title   = {{DifferentialEquations.jl} -- a performant and feature-rich ecosystem for solving differential equations in {Julia}},
+  author  = {Rackauckas, Christopher and Nie, Qing},
+  journal = {Journal of Open Research Software},
+  volume  = {5},
+  number  = {1},
+  year    = {2017}
+}
+
+% [VERIFY] -- well-known statistics paper, source of the Self-Liang
+% boundary-mixture reference used throughout this work; not directly
+% sourced in this conversation, please confirm page numbers.
+@article{self1987asymptotic,
+  title   = {Asymptotic properties of maximum likelihood estimators and likelihood ratio tests under nonstandard conditions},
+  author  = {Self, Steven G. and Liang, Kung-Yee},
+  journal = {Journal of the American Statistical Association},
+  volume  = {82},
+  number  = {398},
+  pages   = {605--610},
+  year    = {1987}
+}
+
+% [VERIFY] -- the importance-weighted autoencoder (IWAE) paper, source of
+% the IW-ELBO objective used throughout this work; well-known ML paper,
+% not directly sourced in this conversation, please confirm venue details.
+@inproceedings{burda2016importance,
+  title     = {Importance weighted autoencoders},
+  author    = {Burda, Yuri and Grosse, Roger and Salakhutdinov, Ruslan},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2016}
+}
+
+% [VERIFY] -- standard source for the Theophylline PK dataset; not
+% directly sourced in this conversation, please confirm exact title/
+% publisher details (this is a technical report / user guide, not a
+% journal article, and citation conventions for it vary).
+@techreport{boeckmann1994nonmem,
+  title       = {{NONMEM} Users Guide: Part V},
+  author      = {Boeckmann, A. J. and Sheiner, L. B. and Beal, S. L.},
+  institution = {University of California, San Francisco},
+  year        = {1994}
+}
+
+% [VERIFY] -- original warfarin PK/PD study; moderate confidence on exact
+% citation details, please double-check before use.
+@article{oreilly1968studies,
+  title   = {Studies on coumarin anticoagulant drugs: initiation of warfarin therapy without a loading dose},
+  author  = {O'Reilly, Robert A. and Aggeler, Paul M.},
+  journal = {Circulation},
+  volume  = {38},
+  number  = {1},
+  pages   = {169--177},
+  year    = {1968}
+}
+
+% [VERIFY] -- nlmixr2 software paper, used for the warfarin FOCEI external
+% validation comparison; moderate confidence, please confirm exact
+% author list and page numbers.
+@article{fidler2019nonlinear,
+  title   = {Nonlinear mixed-effects model development and simulation using {nlmixr} and related {R} open-source packages},
+  author  = {Fidler, Matthew and Wilkins, Justin J. and Hooijmaijers, Rik and Post, Teun M. and Schoemaker, Rik and Trame, Mirjam N. and Xiong, Yuan and Wang, Wenping},
+  journal = {CPT: Pharmacometrics \& Systems Pharmacology},
+  volume  = {8},
+  number  = {9},
+  pages   = {621--633},
+  year    = {2019}
+}
+
+% [VERIFY] -- standard PyTorch citation; well-known, not directly sourced
+% in this conversation.
+@inproceedings{paszke2019pytorch,
+  title     = {{PyTorch}: An imperative style, high-performance deep learning library},
+  author    = {Paszke, Adam and Gross, Sam and Massa, Francisco and Lerer, Adam and Bradbury, James and Chanan, Gregory and Killeen, Trevor and Lin, Zeming and Gimelshein, Natalia and Antiga, Luca and others},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {32},
+  year      = {2019}
+}
+
+% [PLACEHOLDER] -- you referenced this group's work only by surname
+% ("Tarek & Afonso") with no year/venue given in our conversation.
+% Fill in the real citation, or remove this entry and the corresponding
+% \cite in manuscript.qmd if it should not be cited after all.
+@article{PLACEHOLDER_group1,
+  title  = {TODO -- fill in: Tarek \& Afonso, variational inference for NLME models},
+  author = {Tarek and Afonso},
+  year   = {0000},
+  note   = {PLACEHOLDER -- citation details not available in source conversation}
+}
+
+% [PLACEHOLDER] -- you referenced this group's work only by surname
+% ("Li et al.") with no year/venue given in our conversation.
+@article{PLACEHOLDER_group2,
+  title  = {TODO -- fill in: Li et al., variational inference for NLME models},
+  author = {Li and others},
+  year   = {0000},
+  note   = {PLACEHOLDER -- citation details not available in source conversation}
+}
+
+% [PLACEHOLDER] -- you referenced this group's work only by surname
+% ("Baaz et al.") with no year/venue given in our conversation.
+@article{PLACEHOLDER_group3,
+  title  = {TODO -- fill in: Baaz et al., variational inference for NLME models},
+  author = {Baaz and others},
+  year   = {0000},
+  note   = {PLACEHOLDER -- citation details not available in source conversation}
+}
