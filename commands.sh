@@ -186,7 +186,8 @@ baselines_dryrun() {
 
 baselines_real() {
     # Requires a working R/rxode2 environment -- see README Requirements.
-    uv run phase2/nlme_vi_phase2_baselines.py --subjects 20 --reps 1
+    uv run phase2/nlme_vi_phase2_baselines.py --subjects 20 --reps 1 \
+        --out outputs/phase2_baselines
 }
 
 baselines_r_direct() {
@@ -214,7 +215,7 @@ publication_tables() {
         --deltaofv-free-csv outputs/phase2_deltaofv_free.csv \
         --deltaofv-amortized-csv outputs/phase2_deltaofv_amortized_n300.csv \
         --psis-csv outputs/phase2_psis_results.csv \
-        --baseline-csv outputs/phase2_baseline_comparison.csv \
+        --baseline-csv outputs/phase2_baselines/phase2_baseline_comparison.csv \
         --out publication/tables
 }
 
