@@ -18,9 +18,11 @@ NOTES TO SELF / FOR THE AUTHOR (delete before submission):
   automatically. No code executes when this document renders.
 - Figures and tables use Quarto cross-reference labels (`#fig-*` and
   `#tbl-*`) so numbering/order is handled automatically at render time.
-- Every section marked [PLACEHOLDER: nlmixr2/NONMEM] is intentionally
-  left for you to fill in once the FOCEI/SAEM baseline comparison is
-  unblocked.
+- The FOCEI/SAEM ACCURACY comparison is now filled in with real numbers
+  (N=120, 20 replicates). The RUNTIME side is still a narrow, precise
+  placeholder: cpu_secs came back blank for FOCE/SAEM in the current
+  results table -- see the Results and Limitations notes below for
+  exactly what needs fixing before that claim can be written.
 - Citation keys marked "VERIFY" in references.bib are papers I'm
   reasonably but not completely confident about (general knowledge, not
   a source I directly verified in this conversation). Keys marked
@@ -43,7 +45,13 @@ formulations that reuse a single trained model across new datasets
 plain evidence lower bound (ELBO, $K=1$) systematically underestimates
 between-subject variance components (Omega), while importance-weighted
 ELBO (IW-ELBO, $K>1$) and richer variational families (normalizing flows)
-substantially correct this bias. The correction reproduces cleanly on two
+substantially correct this bias. Against independent FOCEI and SAEM
+baseline fits on matched simulated data, corrected variational inference
+($K=64$) recovers both fixed effects and Omega with accuracy closely
+matching both established methods (Omega bias under 1.2% for every
+parameter), while $K=1$ reproduces the same systematic underestimation
+identified throughout this work (Omega bias up to $-22\%$ on the most
+affected parameter). The correction also reproduces cleanly on two
 independent real pharmacokinetic datasets (theophylline, warfarin), with
 fixed-effect estimates on warfarin falling inside the published 95%
 confidence intervals of an independent FOCEI fit despite a simpler
@@ -127,18 +135,28 @@ This paper makes the following contributions:
    ($K>1$, via the importance-weighted ELBO) and richer variational
    families substantially correct the bias, with flow-based posteriors
    closing nearly the entire gap even at $K=1$ in well-identified designs.
-2. We validate the correction on two independent real pharmacokinetic
-   datasets, including an external benchmark comparison in which our
-   fixed-effect estimates agree with an independently published FOCEI fit
-   despite using a simpler structural model.
-3. We extend the analysis to a genuinely nonlinear elimination model
+2. We validate the correction against independent FOCEI and SAEM baseline
+   fits on matched simulated data: corrected variational inference
+   ($K=64$) matches both established methods' accuracy closely (Omega
+   bias under 1.2% on every parameter, comparable to FOCEI's and SAEM's
+   own bias), while $K=1$ reproduces the same systematic underestimation
+   characterized above (Omega bias up to $-22\%$), directly confirming
+   that the corrected point estimates -- not just their relative
+   improvement over $K=1$ -- are quantitatively trustworthy against
+   established methods, not only self-consistent within variational
+   inference.
+3. We further validate the correction on two independent real
+   pharmacokinetic datasets, including an external benchmark comparison
+   in which our fixed-effect estimates agree with an independently
+   published FOCEI fit despite using a simpler structural model.
+4. We extend the analysis to a genuinely nonlinear elimination model
    (Michaelis-Menten kinetics) with no closed-form solution, and identify
    a structural identifiability limitation -- consistent with standard
    pharmacometric practice, not a VI-specific artifact -- for estimating
    between-subject variability on both Michaelis-Menten parameters
    simultaneously, resolving it via a design restricting random effects to
    the empirically well-identified parameter.
-4. We show that the marginal likelihood recovered by variational
+5. We show that the marginal likelihood recovered by variational
    inference is not uniformly valid for likelihood-ratio tests: for
    comparisons that change the number of random effects, a per-subject
    free posterior introduces additional effective degrees of freedom that
@@ -146,14 +164,15 @@ This paper makes the following contributions:
    reference for testing a variance component against zero
    [@self1987asymptotic] -- does not account for, while an amortized
    posterior's shared encoder does not have this problem.
-5. We characterize an importance-sampling diagnostic (effective sample
+6. We characterize an importance-sampling diagnostic (effective sample
    size) that distinguishes well- from poorly-converged fits without
    requiring access to ground truth, making it usable on real data where
    the correctness of a fit cannot otherwise be directly verified.
 
-[PLACEHOLDER: nlmixr2/NONMEM -- once the FOCEI/SAEM baseline comparison
-is available, add a paragraph here (or fold into contribution 2 above)
-stating the runtime/accuracy comparison explicitly.]
+[PLACEHOLDER: nlmixr2/NONMEM -- the accuracy side of the FOCEI/SAEM
+comparison (contribution 2 above) is now complete; a runtime comparison
+is not yet included (see Methods, Results, and Limitations below) and
+should be added as an explicit contribution once available.]
 
 ## Methods
 
@@ -404,20 +423,31 @@ $\chi^2_1$.
 
 ### Comparison to Established Estimation Methods
 
-[PLACEHOLDER: nlmixr2/NONMEM -- this subsection will describe the FOCEI
-and SAEM baseline fits used for direct runtime and accuracy comparison,
-via `nlmixr2` [@fidler2019nonlinear] and/or NONMEM
-[@beal1980nonmem; @wang2008derivation], once the R-based baseline
-pipeline is complete. Include: model specification matched to the
-variational-inference structural model and residual error model,
-number of repeated optimization starts, and the runtime measurement
-methodology (process CPU time, not wall-clock).]
+FOCEI and SAEM baseline fits are obtained via the `nlmixr2` R package
+[@fidler2019nonlinear], using a structural model and log-normal residual
+error model matched exactly to the variational-inference side's
+`OneCmtOral` -- identical parameterization ($\log CL = \theta_{CL} +
+\eta_{CL}$, and analogously for $V$ and $k_a$), and the same off-truth
+initial values used throughout this work for both estimation approaches,
+so that neither starts closer to the truth than the other. The
+comparison uses $N=120$ subjects and 20 replicate simulated datasets,
+matching the scale used for the linear-tier simulation study above; each
+replicate is fit once by FOCEI, once by SAEM, and by variational
+inference at $K=1$ and $K=64$, all on the identical simulated dataset.
+[PLACEHOLDER: nlmixr2/NONMEM -- runtime is intended to be measured as
+process CPU time (not wall-clock) for both the R and Python processes,
+consistent with the timing methodology used throughout this work; at the
+time of writing, process CPU time was not correctly captured for the
+FOCEI/SAEM fits in the results reported below (see Results and
+Limitations), so no runtime comparison is yet included.]
 
 ### Software and Computational Environment
 
 All variational inference models are implemented in PyTorch
-[@paszke2019pytorch]. [PLACEHOLDER: nlmixr2/NONMEM software versions,
-once finalized.]
+[@paszke2019pytorch]. FOCEI and SAEM baseline fits use the `nlmixr2` R
+package [@fidler2019nonlinear]. [PLACEHOLDER: nlmixr2/NONMEM -- exact R
+and `nlmixr2` package version numbers, e.g. via `sessionInfo()` /
+`packageVersion("nlmixr2")`, to be added once confirmed.]
 
 ## Results
 
@@ -616,10 +646,39 @@ comparison.
 
 ### Comparison to Established Estimation Methods
 
-[PLACEHOLDER: nlmixr2/NONMEM -- this subsection will report the direct
-FOCEI/SAEM runtime and parameter-recovery comparison, including
-`{{< include publication/tables/table_baseline_comparison.md >}}` once
-that table exists, once the R-based baseline pipeline is unblocked.]
+On matched simulated data ($N=120$ subjects, 20 replicates), FOCEI,
+SAEM, and variational inference at $K=64$ recover both fixed effects and
+$\Omega$ with closely comparable accuracy, while $K=1$ reproduces the
+same systematic $\Omega$ underestimation established throughout the
+linear-tier results above (@tbl-baseline-comparison). Fixed-effect bias
+is small for every method (under 2.1% in magnitude across $CL$, $V$, and
+$k_a$ for FOCEI, SAEM, and both VI arms alike), consistent with the
+pattern established throughout this work that fixed effects are not
+affected by the plain-ELBO bias regardless of estimation method. For
+$\Omega$, FOCEI and SAEM show bias no larger than 3.6% on any parameter
+($\Omega_{ka}$: $-3.6\%$ and $-1.25\%$ respectively); VI at $K=64$
+matches this closely, with bias under 1.2% on every $\Omega$ parameter
+($\Omega_{CL}$: $-0.30\%$, $\Omega_V$: $+1.15\%$, $\Omega_{ka}$:
+$-1.18\%$). VI at $K=1$, by contrast, shows the characteristic pattern
+identified throughout this work: $\Omega_V$ and $\Omega_{ka}$ biased by
+$-14.3\%$ and $-21.9\%$ respectively -- an order of magnitude larger than
+FOCEI, SAEM, or VI at $K=64$ on the same parameters. A parallel pattern
+holds for the residual-error parameter $\sigma$: FOCEI, SAEM, and VI at
+$K=64$ all recover $\sigma$ within 2% of its true value, while VI at
+$K=1$ overestimates it by 7.4%.
+
+{{< include publication/tables/table_baseline_comparison.md >}}
+
+: Mean parameter estimates by method (FOCEI, SAEM, variational inference
+at $K=1$ and $K=64$) against ground truth, $N=120$ subjects, 20
+replicates. {#tbl-baseline-comparison}
+
+[PLACEHOLDER: nlmixr2/NONMEM -- a runtime comparison is not yet included.
+Process CPU time was not correctly captured for the FOCEI/SAEM fits in
+the results reported above (only variational inference's `cpu_secs` is
+currently populated in the underlying data); see Limitations. Once
+corrected, this section should report the `cpu_secs` comparison directly,
+alongside the accuracy comparison above.]
 
 ## Discussion
 
@@ -631,12 +690,19 @@ variance components, this bias is substantially correctable by
 importance-weighting the training objective ($K>1$) or by using a richer
 variational family (normalizing flows), and the correction reproduces on
 real pharmacokinetic data with external validation against an
-independently published fit. This supports the practical use of
-corrected variational inference as a faster alternative to FOCEI/SAEM for
-NLME model fitting, with two important caveats developed below: not every
-posterior architecture is safe to use for every purpose, and the
-correction of point estimates does not automatically extend to every
-downstream use of a fitted model.
+independently published fit. Directly against independent FOCEI and SAEM
+baseline fits on matched simulated data, corrected variational inference
+matches both established methods' accuracy closely, while uncorrected
+$K=1$ shows bias an order of magnitude larger on the most affected
+parameters -- evidence that the correction identified in this work is not
+merely an internal, self-referential improvement within variational
+inference, but brings VI to a level of accuracy quantitatively
+comparable to the methods it is proposed to replace. This supports the
+practical use of corrected variational inference as a faster alternative
+to FOCEI/SAEM for NLME model fitting, with two important caveats
+developed below: not every posterior architecture is safe to use for
+every purpose, and the correction of point estimates does not
+automatically extend to every downstream use of a fitted model.
 
 **Practical guidance.** Three specific combinations identified in this
 work should be avoided in practice rather than used as encountered.
@@ -669,8 +735,9 @@ stable across substantially different training durations and sampling
 designs in exploratory analyses, in a pattern distinct from the
 small-sample bias discussed below -- is itself supporting evidence for
 this interpretation, though a direct comparison against FOCEI/SAEM on the
-same restricted model specification (see the placeholder Results
-subsection above) would strengthen it further.
+same restricted model specification would strengthen it further; the
+FOCEI/SAEM baseline comparison reported above uses the linear tier only
+and does not yet extend to the nonlinear (Michaelis-Menten) model.
 
 **Small-sample bias.** Some residual $\Omega$ bias remaining at high $K$
 on the smallest real dataset (theophylline, $N=12$) is substantially, if
@@ -708,29 +775,37 @@ shapes vary substantially more (spanning saturated, transitional, and
 first-order elimination regimes) than the comparatively uniform
 trajectory shapes of the linear tier, but this is not yet tested.
 
-**Limitations.** [PLACEHOLDER: nlmixr2/NONMEM -- the most significant
-current limitation is the absence of a direct runtime and accuracy
-comparison against FOCEI and SAEM, which would allow the practical
-"is this actually faster and as accurate" question motivating this work
-to be answered quantitatively rather than by comparison to the general
-literature's reported comparisons for other models
-(e.g. @arruda2024amortized's reported roughly two-orders-of-magnitude
-speedup on their tested models). This is expected to be added once the
-R-based baseline pipeline is complete.] Beyond the baseline comparison,
-this work tests a single linear structural model class and a single
-nonlinear structural model class; whether the identified biases and
-corrections generalize to structurally more complex models (multiple
-compartments, covariate effects, time-varying dosing) is not directly
-tested here. The residual, smaller miscalibration remaining in the
-amortized-posterior likelihood-ratio test calibration after the
-boundary-mass correction (see Results) also remains unexplained; a
-follow-up analysis testing whether divergence in the two nested models'
-residual-error estimates explains this residual found a real correlation
-but could not establish it as a mechanism independent of the
-already-understood boundary-mass effect, given that the residual-error
-parameter appears directly inside the likelihood by construction.
+**Limitations.** The accuracy side of the FOCEI/SAEM comparison (see
+Results) is now complete and directly supports this work's central
+claim on the linear tier. Two gaps remain. [PLACEHOLDER: nlmixr2/NONMEM
+-- first, the runtime side of that comparison is not yet reported:
+process CPU time was not correctly captured for the FOCEI/SAEM fits in
+the current baseline pipeline, so the practical "how much faster"
+question this work is partly motivated by cannot yet be answered
+quantitatively for this model, only by comparison to the general
+literature's reported comparisons for other models (e.g.
+@arruda2024amortized's reported roughly two-orders-of-magnitude speedup
+on their tested models). This is expected to be resolved by correcting
+the runtime measurement in the baseline pipeline. Second, the baseline
+comparison currently covers only the linear tier; extending it to the
+Michaelis-Menten nonlinear tier would substantiate the identifiability
+claim made above with a direct comparison rather than an appeal to
+general pharmacometric practice.] Beyond the baseline comparison, this
+work tests a single linear structural model class and a single nonlinear
+structural model class; whether the identified biases and corrections
+generalize to structurally more complex models (multiple compartments,
+covariate effects, time-varying dosing) is not directly tested here. The
+residual, smaller miscalibration remaining in the amortized-posterior
+likelihood-ratio test calibration after the boundary-mass correction
+(see Results) also remains unexplained; a follow-up analysis testing
+whether divergence in the two nested models' residual-error estimates
+explains this residual found a real correlation but could not establish
+it as a mechanism independent of the already-understood boundary-mass
+effect, given that the residual-error parameter appears directly inside
+the likelihood by construction.
 
-**Future work.** Beyond completing the FOCEI/SAEM baseline comparison,
+**Future work.** Beyond correcting the runtime measurement in the
+FOCEI/SAEM baseline comparison and extending it to the nonlinear tier,
 concrete directions include: validating the decoupled-base-distribution
 flow architecture described above at production scale; extending the
 nonlinear tier to structurally harder models such as target-mediated drug
