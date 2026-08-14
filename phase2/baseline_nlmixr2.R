@@ -50,7 +50,7 @@ if (!method %in% c("foce", "saem")) {
   stop("method must be 'foce' or 'saem'")
 }
 
-dat <- read_csv(input_csv, show_col_types = FALSE)
+dat <- read_csv(input_csv, show_col_types = FALSE, na = c("", "NA", "."))
 cat(sprintf("Loaded %d rows, %d subjects from %s\n",
             nrow(dat), length(unique(dat$ID)), input_csv))
 

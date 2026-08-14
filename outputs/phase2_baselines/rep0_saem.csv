@@ -1,2 +1,2 @@
-method,CL,V,ka,om_CL,om_V,om_ka,sigma,ofv,logLik,cpu_secs,wall_secs,n_subjects
-saem,,,,,,,,,,,,
+method,CL,V,ka,om_CL,om_V,om_ka,sigma,ofv,logLik,elapsed_s,n_subjects
+saem,2.695473654966748,28.937059240536332,1.3947840375356129,0.3786125312259563,0.21115623579095474,0.573374394157822,0.22397031709432946,NA,-50.4297026935775,12.299816131591797,20
