@@ -307,13 +307,13 @@ fig_phase0 <- function(
 
   p <- ggplot(
     plot_df,
-    aes(
-      x = K,
-      y = mean,
-      group = param,
-      linetype = param,
-      shape = param
-    )
+      aes(
+        x = K,
+        y = mean,
+        group = param,
+        color = param,
+        shape = param
+      )
   ) +
     geom_hline(
       yintercept = 0,
@@ -464,13 +464,13 @@ fig_phase1_grid <- function(
 
   p <- ggplot(
     plot_df,
-    aes(
-      x = K,
-      y = mean,
-      group = posterior,
-      linetype = posterior,
-      shape = posterior
-    )
+      aes(
+        x = K,
+        y = mean,
+        group = posterior,
+        color = posterior,
+        shape = posterior
+      )
   ) +
     geom_hline(
       yintercept = 0,
@@ -576,13 +576,13 @@ fig_nonlinear <- function(
 
   p <- ggplot(
     plot_df,
-    aes(
-      x = K,
-      y = mean,
-      group = param,
-      linetype = param,
-      shape = param
-    )
+      aes(
+        x = K,
+        y = mean,
+        group = param,
+        color = param,
+        shape = param
+      )
   ) +
     geom_hline(
       yintercept = 0,
