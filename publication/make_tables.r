@@ -272,6 +272,10 @@ save_table <- function(
   out_dir
 ) {
 
+  # Final publication-facing column names are applied only at save time so
+  # internal table-building code can continue to use stable snake_case names.
+  df <- format_table_headers(df)
+
   out_dir <- resolve_path(out_dir)
 
   dir.create(
@@ -323,6 +327,154 @@ save_table <- function(
 }
 
 
+
+# =============================================================================
+# Publication notation
+# =============================================================================
+
+format_param_label <- function(x) {
+
+  # Source CSVs retain implementation-facing names (e.g. om_CL).
+  # Publication outputs use standard pharmacometric notation:
+  #   Omega = covariance matrix (manuscript equations only)
+  #   omega_j = random-effect standard deviation reported in tables/figures
+  #
+  # Markdown math is used so included .md tables render consistently in
+  # Quarto HTML/PDF/DOCX output.
+
+  labels <- c(
+    "CL" = "$CL$",
+    "V" = "$V$",
+    "ka" = "$k_a$",
+    "sigma" = "$\\sigma$",
+    "Vmax" = "$V_{\\max}$",
+    "Km" = "$K_m$",
+    "om_CL" = "$\\omega_{CL}$",
+    "om_V" = "$\\omega_V$",
+    "om_ka" = "$\\omega_{k_a}$",
+    "om_Vmax" = "$\\omega_{V_{\\max}}$",
+    "om_Km" = "$\\omega_{K_m}$"
+  )
+
+  out <- unname(labels[as.character(x)])
+
+  # Preserve any unrecognized parameter names rather than replacing them
+  # with NA, which keeps the script robust to future model extensions.
+  missing <- is.na(out)
+  out[missing] <- as.character(x)[missing]
+
+  out
+}
+
+
+format_param_column <- function(df) {
+
+  if ("param" %in% names(df)) {
+    df <- df %>%
+      mutate(
+        param = format_param_label(param)
+      )
+  }
+
+  df
+}
+
+
+format_baseline_headers <- function(df) {
+
+  header_map <- c(
+    "CL" = "$CL$",
+    "V" = "$V$",
+    "ka" = "$k_a$",
+    "om_CL" = "$\\omega_{CL}$",
+    "om_V" = "$\\omega_V$",
+    "om_ka" = "$\\omega_{k_a}$",
+    "sigma" = "$\\sigma$"
+  )
+
+  new_names <- names(df)
+
+  for (old_name in names(header_map)) {
+    new_names[new_names == old_name] <- header_map[[old_name]]
+  }
+
+  names(df) <- new_names
+  df
+}
+
+
+
+format_table_headers <- function(df) {
+
+  header_map <- c(
+    "posterior" = "Posterior",
+    "scenario" = "Sampling design",
+    "family" = "Variational family",
+    "K" = "$K$",
+    "param" = "Parameter",
+    "mean_bias_pct" = "Mean bias (%)",
+    "sd_bias_pct" = "SD bias (%)",
+    "n_estimates" = "n",
+    "mean_estimate" = "Mean estimate",
+    "truth" = "Truth",
+    "frac_converged" = "Fraction converged",
+    "dataset" = "Dataset",
+    "K_low" = "$K_{low}$",
+    "estimate_K_low" = "Estimate at $K_{low}$",
+    "K_high" = "$K_{high}$",
+    "estimate_K_high" = "Estimate at $K_{high}$",
+    "pct_diff_low_vs_high" = "Difference, low vs high (%)",
+    "condition" = "Condition",
+    "n_reps" = "Replicates",
+    "boundary_fraction_pct" = "Boundary fraction (%)",
+    "n_negative_dofv" = "Negative $\\Delta$OFV",
+    "ks_stat" = "KS statistic",
+    "ks_p" = "KS p-value",
+    "type1_error_correct_test_pct" = "Type-I error (%)",
+    "arm" = "Fit-quality arm",
+    "mean" = "Mean",
+    "median" = "Median",
+    "min" = "Minimum",
+    "max" = "Maximum",
+    "method" = "Method",
+    "runtime_s_mean" = "Runtime mean (s)",
+    "runtime_s_median" = "Runtime median (s)"
+  )
+
+  new_names <- names(df)
+
+  for (old_name in names(header_map)) {
+    new_names[new_names == old_name] <- header_map[[old_name]]
+  }
+
+  names(df) <- new_names
+  df
+}
+
+
+format_method_labels <- function(df) {
+
+  if ("method" %in% names(df)) {
+    df <- df %>%
+      mutate(
+        method = recode(
+          as.character(method),
+          "foce" = "FOCEI",
+          "focei" = "FOCEI",
+          "saem" = "SAEM",
+          "vi" = "VI",
+          "vi_k1" = "VI, K=1",
+          "vi_k64" = "VI, K=64",
+          "TRUTH" = "Truth",
+          .default = as.character(method)
+        )
+      )
+  }
+
+  df
+}
+
+
 # =============================================================================
 # Table builders
 # =============================================================================
@@ -364,7 +516,8 @@ table_phase0 <- function(df) {
         sd_bias_pct,
         2
       )
-    )
+    ) %>%
+    format_param_column()
 }
 
 
@@ -405,7 +558,8 @@ table_phase0_fixed_effects <- function(df) {
         sd_bias_pct,
         2
       )
-    )
+    ) %>%
+    format_param_column()
 }
 
 
@@ -452,7 +606,8 @@ table_phase1_grid <- function(df) {
         sd_bias_pct,
         2
       )
-    )
+    ) %>%
+    format_param_column()
 }
 
 
@@ -499,7 +654,8 @@ table_phase1_grid_fixed_effects <- function(df) {
         sd_bias_pct,
         2
       )
-    )
+    ) %>%
+    format_param_column()
 }
 
 
@@ -549,7 +705,8 @@ table_nonlinear <- function(df) {
         ),
         ~ round(.x, 3)
       )
-    )
+    ) %>%
+    format_param_column()
 }
 
 
@@ -630,7 +787,8 @@ table_realdata <- function(
     }
   )
 
-  bind_rows(rows)
+  bind_rows(rows) %>%
+    format_param_column()
 }
 
 
@@ -818,19 +976,29 @@ table_baseline_comparison <- function(df) {
     )
   }
 
-  if ("cpu_secs" %in% names(df)) {
+  # Standardize runtime naming. New baseline files should use runtime_s;
+  # cpu_secs is accepted for backward compatibility with older outputs.
+  runtime_col <- if ("runtime_s" %in% names(df)) {
+    "runtime_s"
+  } else if ("cpu_secs" %in% names(df)) {
+    "cpu_secs"
+  } else {
+    NULL
+  }
+
+  if (!is.null(runtime_col)) {
 
     runtime <- df %>%
       group_by(
         method
       ) %>%
       summarise(
-        cpu_secs_mean = mean(
-          cpu_secs,
+        runtime_s_mean = mean(
+          .data[[runtime_col]],
           na.rm = TRUE
         ),
-        cpu_secs_median = median(
-          cpu_secs,
+        runtime_s_median = median(
+          .data[[runtime_col]],
           na.rm = TRUE
         ),
         .groups = "drop"
@@ -849,7 +1017,9 @@ table_baseline_comparison <- function(df) {
         where(is.numeric),
         ~ round(.x, 4)
       )
-    )
+    ) %>%
+    format_method_labels() %>%
+    format_baseline_headers()
 }
 
 

@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Importance-Weighted Variational Inference for Nonlinear Mixed-Effects Models: Characterizing and Correcting Random-Effect Variance Bias</title>
+<title>Importance-Weighted Variational Inference for Nonlinear Mixed-Effects Models: Characterizing and Correcting Bias in Between-Subject Variability</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -97,7 +97,7 @@ window.Quarto = {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Importance-Weighted Variational Inference for Nonlinear Mixed-Effects Models: Characterizing and Correcting Random-Effect Variance Bias</h1>
+<h1 class="title">Importance-Weighted Variational Inference for Nonlinear Mixed-Effects Models: Characterizing and Correcting Bias in Between-Subject Variability</h1>
 </div>
 
 
@@ -116,22 +116,14 @@ window.Quarto = {
 
 <section id="abstract" class="level2">
 <h2 class="anchored" data-anchor-id="abstract">Abstract</h2>
-<p>Nonlinear mixed-effects (NLME) models are the standard tool for characterizing between-subject variability in pharmacokinetic and pharmacodynamic data, but established estimation methods, first-order conditional estimation with interaction (FOCEI) and stochastic approximation expectation-maximization (SAEM), scale poorly with population size and model complexity. Variational inference (VI) has recently been proposed as a faster alternative, including amortized formulations that reuse a single trained model across new datasets <span class="citation" data-cites="arruda2024amortized">(<a href="#ref-arruda2024amortized" role="doc-biblioref">Arruda et al. 2024</a>)</span>. We show, across simulated and real data, that the plain evidence lower bound (ELBO, <span class="math inline">\(K=1\)</span>) systematically underestimates between-subject variance components (Omega), while importance-weighted ELBO (IW-ELBO, <span class="math inline">\(K&gt;1\)</span>) and richer variational families (normalizing flows) substantially correct this bias. Against independent FOCEI and SAEM baseline fits on matched simulated data, corrected variational inference (<span class="math inline">\(K=64\)</span>) recovers both fixed effects and Omega with accuracy closely matching both established methods (Omega bias under 1.2% for every parameter), while <span class="math inline">\(K=1\)</span> reproduces the same systematic underestimation identified throughout this work (Omega bias up to <span class="math inline">\(-22\%\)</span> on the most affected parameter). The correction also reproduces cleanly on two independent real pharmacokinetic datasets (theophylline, warfarin), with fixed-effect estimates on warfarin falling inside the published 95% confidence intervals of an independent FOCEI fit despite a simpler structural model. Extending to a genuinely nonlinear (Michaelis-Menten elimination) model, the same correction holds for parameters with between-subject variability, while we identify and resolve a structural, cross-method identifiability limitation specific to estimating variability on both Michaelis-Menten parameters simultaneously. We further show that likelihood-ratio tests built on the variational posterior’s recovered marginal likelihood are only valid for random-effect-structure comparisons under a shared-encoder (amortized) posterior, not a per-subject free posterior, due to an effective-degrees-of-freedom mismatch with classical asymptotic theory. Finally, we characterize a diagnostic (importance-sampling effective sample size) that separates well- from poorly-converged fits without requiring ground truth. Together, these results give practitioners concrete guidance for when and how variational inference can safely replace established NLME estimation methods.</p>
+<p>Nonlinear mixed-effects (NLME) models are widely used to characterize population-level effects and between-subject variability in pharmacokinetic and pharmacodynamic data. Established estimation methods such as first-order conditional estimation with interaction (FOCEI) and stochastic approximation expectation-maximization (SAEM) can become computationally demanding as population size and model complexity increase. Variational inference (VI) offers an optimization-based alternative, including amortized formulations that reuse a shared inference model across subjects and datasets. Across simulated and real data, we show that the standard evidence lower bound (ELBO; <span class="math inline">\(K=1\)</span>) systematically underestimates between-subject variability, whereas the importance-weighted ELBO (IW-ELBO; <span class="math inline">\(K&gt;1\)</span>) and richer variational families substantially reduce this bias. In matched simulated data, VI at <span class="math inline">\(K=64\)</span> recovers fixed effects and between-subject variability with accuracy comparable to FOCEI and SAEM, with bias below 1.2% for every reported random-effect standard deviation, whereas <span class="math inline">\(K=1\)</span> reproduces the systematic underestimation observed throughout the study. The same pattern is observed in two independent real pharmacokinetic datasets (theophylline and warfarin). In a nonlinear Michaelis-Menten elimination model, the correction persists for identifiable random effects, while exploratory analyses reveal a cross-method identifiability limitation when variability is assigned simultaneously to both Michaelis-Menten parameters. We further show that likelihood-ratio tests based on recovered marginal likelihoods are not uniformly calibrated across posterior architectures: tests that alter the random-effect structure are miscalibrated under a per-subject free posterior but substantially improved under a shared amortized posterior. Finally, importance-sampling effective sample size distinguishes well-converged from deliberately under-trained fits without requiring ground truth. These results delineate when corrected VI provides accurate NLME estimation and identify settings in which posterior architecture or downstream inference requires additional safeguards.</p>
 </section>
 <section id="introduction" class="level2">
 <h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
-<p>Nonlinear mixed-effects (NLME) models describe how a shared population structure, consisting of fixed effects and the distribution of between-subject random effects, gives rise to individual-level observations, and they remain the standard analytic tool across pharmacokinetics, pharmacodynamics, and related fields wherever repeated, correlated measurements are collected on a heterogeneous population. Because the individual-level likelihood required to fit an NLME model is generally only available as an intractable integral over the random effects <span class="citation" data-cites="pinheiro1994topics">(<a href="#ref-pinheiro1994topics" role="doc-biblioref">Pinheiro 1994</a>)</span>, every established estimation method relies on some form of approximation. First-order conditional estimation with interaction (FOCEI) <span class="citation" data-cites="beal1980nonmem wang2008derivation">(<a href="#ref-beal1980nonmem" role="doc-biblioref">Beal and Sheiner 1980</a>; <a href="#ref-wang2008derivation" role="doc-biblioref">Wang 2008</a>)</span> linearizes the model around each subject’s conditional mode; stochastic approximation expectation-maximization (SAEM) <span class="citation" data-cites="kuhn2005maximum">(<a href="#ref-kuhn2005maximum" role="doc-biblioref">Kuhn and Lavielle 2005</a>)</span> instead uses a stochastic sampling scheme that converges under weaker assumptions but at substantially higher computational cost, particularly as the number of random effects or the structural complexity of the model grows.</p>
-<p>Variational inference (VI) reformulates this integration problem as an optimization problem: rather than sampling or linearizing, a tractable family of approximate posterior distributions is fit to the true posterior by maximizing a lower bound on the marginal likelihood, the evidence lower bound (ELBO). Recent work has proposed <em>amortized</em> VI for NLME models specifically, in which a single neural network is trained once to produce individual-specific posteriors for any new subject’s data, making the population-level inference step that follows extremely cheap and reusable across datasets and even across different population models <span class="citation" data-cites="arruda2024amortized">(<a href="#ref-arruda2024amortized" role="doc-biblioref">Arruda et al. 2024</a>)</span>. This amortized approach, and related simulation-based inference methods more broadly, promise a substantial speed advantage over FOCEI and SAEM, particularly for large populations or structurally complex models.</p>
-<p>However, a known and under-characterized limitation of the plain ELBO is that it systematically underestimates posterior variance, a general property of ELBO-based VI wherever the approximating family cannot perfectly capture the true posterior’s shape, which is essentially always the case for the per-subject posteriors induced by an NLME model. In the NLME setting, this translates into underestimated between-subject variance components (commonly denoted Omega, or written as the diagonal of a covariance matrix <span class="math inline">\(\Omega\)</span>), precisely the quantity that most directly answers scientific questions about population heterogeneity, and the quantity on which decisions such as covariate inclusion are frequently based. While this failure mode has been noted in passing in several places in the recent literature applying VI to NLME models, it has not, to our knowledge, been systematically characterized: under what conditions it arises, whether it can be corrected, and whether correcting the point estimates of <span class="math inline">\(\Omega\)</span> is sufficient to make the resulting fit trustworthy for the full range of downstream uses an NLME model is put to, in particular likelihood-ratio-based model selection.</p>
-<p>This paper makes the following contributions:</p>
-<ol type="1">
-<li>We systematically characterize plain-ELBO (<span class="math inline">\(K=1\)</span>) Omega underestimation across simulated designs (dense and sparse sampling), variational posterior architectures (per-subject free posteriors vs. amortized encoder-based posteriors), and variational families (Gaussian vs.&nbsp;normalizing flow), and show that both importance-weighting (<span class="math inline">\(K&gt;1\)</span>, via the importance-weighted ELBO) and richer variational families substantially correct the bias, with flow-based posteriors closing nearly the entire gap even at <span class="math inline">\(K=1\)</span> in well-identified designs.</li>
-<li>We validate the correction against independent FOCEI and SAEM baseline fits on matched simulated data: corrected variational inference (<span class="math inline">\(K=64\)</span>) matches both established methods’ accuracy closely (Omega bias under 1.2% on every parameter, comparable to FOCEI’s and SAEM’s own bias), while <span class="math inline">\(K=1\)</span> reproduces the same systematic underestimation characterized above (Omega bias up to <span class="math inline">\(-22\%\)</span>), directly confirming that the corrected point estimates, not just their relative improvement over <span class="math inline">\(K=1\)</span>, are quantitatively trustworthy against established methods, not only self-consistent within variational inference.</li>
-<li>We further validate the correction on two independent real pharmacokinetic datasets, including an external benchmark comparison in which our fixed-effect estimates agree with an independently published FOCEI fit despite using a simpler structural model.</li>
-<li>We extend the analysis to a genuinely nonlinear elimination model (Michaelis-Menten kinetics) with no closed-form solution, and identify a structural identifiability limitation, consistent with standard pharmacometric practice rather than a VI-specific artifact, for estimating between-subject variability on both Michaelis-Menten parameters simultaneously, resolving it via a design restricting random effects to the empirically well-identified parameter.</li>
-<li>We show that the marginal likelihood recovered by variational inference is not uniformly valid for likelihood-ratio tests: for comparisons that change the number of random effects, a per-subject free posterior introduces additional effective degrees of freedom that classical asymptotic theory, including the correct boundary-mixture reference for testing a variance component against zero <span class="citation" data-cites="self1987asymptotic">(<a href="#ref-self1987asymptotic" role="doc-biblioref">Self and Liang 1987</a>)</span>, does not account for, while an amortized posterior’s shared encoder does not have this problem.</li>
-<li>We characterize an importance-sampling diagnostic (effective sample size) that distinguishes well- from poorly-converged fits without requiring access to ground truth, making it usable on real data where the correctness of a fit cannot otherwise be directly verified.</li>
-</ol>
+<p>Nonlinear mixed-effects (NLME) models are widely used to characterize population-level trends and between-subject variability in pharmacokinetic, pharmacodynamic, and related longitudinal data. They are particularly useful when repeated observations are collected from heterogeneous populations. Fitting an NLME model requires integrating over subject-specific random effects, an integral that is generally unavailable in closed form <span class="citation" data-cites="pinheiro1994topics">(<a href="#ref-pinheiro1994topics" role="doc-biblioref">Pinheiro 1994</a>)</span>. Established estimation methods therefore rely on approximations. First-order conditional estimation with interaction (FOCEI) <span class="citation" data-cites="beal1980nonmem wang2008derivation">(<a href="#ref-beal1980nonmem" role="doc-biblioref">Beal and Sheiner 1980</a>; <a href="#ref-wang2008derivation" role="doc-biblioref">Wang 2008</a>)</span> linearizes the model around each subject’s conditional mode, whereas stochastic approximation expectation-maximization (SAEM) <span class="citation" data-cites="kuhn2005maximum">(<a href="#ref-kuhn2005maximum" role="doc-biblioref">Kuhn and Lavielle 2005</a>)</span> uses stochastic sampling within an iterative optimization scheme.</p>
+<p>Variational inference (VI) approaches the same integration problem through optimization. A tractable approximate posterior is fit by maximizing a lower bound on the marginal likelihood, the evidence lower bound (ELBO). Recent work has extended this framework to <em>amortized</em> VI for NLME models, in which a shared neural encoder maps a subject’s data to subject-specific posterior parameters <span class="citation" data-cites="arruda2024amortized">(<a href="#ref-arruda2024amortized" role="doc-biblioref">Arruda et al. 2024</a>)</span>. Once trained, the encoder can be reused across subjects and potentially across related datasets, making amortized inference attractive in settings where repeated fitting is required.</p>
+<p>A central limitation of the standard ELBO is that an imperfect variational approximation can produce a loose bound and distorted posterior uncertainty. Recent applications of VI to NLME models have noted underestimation of variability parameters <span class="citation" data-cites="tarek2026fitting li2026variational baaz2026empirical">(<a href="#ref-tarek2026fitting" role="doc-biblioref">Tarek and Afonso 2026</a>; <a href="#ref-li2026variational" role="doc-biblioref">Li et al. 2026</a>; <a href="#ref-baaz2026empirical" role="doc-biblioref">Baaz, Sjöberg, and Jirstrand 2026</a>)</span>, but the phenomenon has not been systematically characterized across sampling designs, posterior architectures, and variational families. In NLME models, this issue is especially important because between-subject variability is often scientifically consequential and can influence downstream decisions such as covariate modeling and random-effect selection. It is therefore necessary to determine not only whether the bias occurs, but also whether it can be corrected and whether corrected point estimates are sufficient for downstream likelihood-based inference.</p>
+<p>In this work, we systematically characterize the dependence of between-subject variability estimates on the number of importance samples, <span class="math inline">\(K\)</span>, under the standard ELBO (<span class="math inline">\(K=1\)</span>) and IW-ELBO (<span class="math inline">\(K&gt;1\)</span>). We examine dense and sparse sampling designs, free and amortized posterior architectures, and Gaussian and normalizing-flow variational families. We benchmark corrected VI against FOCEI and SAEM on matched simulated datasets, test whether the same pattern reproduces in two real pharmacokinetic datasets, and extend the analysis to a nonlinear Michaelis-Menten elimination model. We further evaluate importance-sampling effective sample size as a practical diagnostic of fit quality and assess whether recovered marginal likelihoods support calibrated likelihood-ratio testing for changes in random-effect structure. Together, these experiments identify where VI provides reliable NLME estimation, where importance weighting materially improves accuracy, and where posterior architecture remains important for downstream inference.</p>
 </section>
 <section id="methods" class="level2">
 <h2 class="anchored" data-anchor-id="methods">Methods</h2>
@@ -151,7 +143,12 @@ y_{ij} = f(t_{ij}, \phi_i) \cdot \exp(\epsilon_{ij}), \qquad
 \phi_i = \theta \odot \exp(\eta_i), \qquad
 \eta_i \sim \mathcal{N}(0, \Omega),
 \tag{3}\]</span></span></p>
-<p>with <span class="math inline">\(\Omega\)</span> diagonal (independent random effects) throughout this work. The population-level likelihood contribution of subject <span class="math inline">\(i\)</span> requires integrating the random effects out of the joint density (<a href="#eq-marginal-likelihood" class="quarto-xref">Equation&nbsp;4</a>),</p>
+<p>with <span class="math inline">\(\Omega\)</span> diagonal (independent random effects) throughout this work. We parameterize the diagonal covariance matrix in terms of random-effect standard deviations,</p>
+<p><span class="math display">\[
+\Omega = \operatorname{diag}(\omega_1^2, \ldots, \omega_p^2),
+\]</span></p>
+<p>where <span class="math inline">\(\omega_j\)</span> denotes the between-subject standard deviation for random effect <span class="math inline">\(j\)</span>. Accordingly, reported quantities such as <span class="math inline">\(\omega_{CL}\)</span>, <span class="math inline">\(\omega_V\)</span>, and <span class="math inline">\(\omega_{k_a}\)</span> are standard deviations rather than variances. In prose, we use <em>between-subject variability</em> (BSV) when referring to this variability conceptually and reserve <span class="math inline">\(\Omega\)</span> for the covariance matrix.</p>
+<p>The population-level likelihood contribution of subject <span class="math inline">\(i\)</span> requires integrating the random effects out of the joint density (<a href="#eq-marginal-likelihood" class="quarto-xref">Equation&nbsp;4</a>),</p>
 <p><span id="eq-marginal-likelihood"><span class="math display">\[
 p(y_i \mid \theta, \Omega, \sigma^2) =
 \int p(y_i \mid \phi_i, \sigma^2) \, p(\eta_i \mid \Omega) \, d\eta_i,
@@ -187,26 +184,26 @@ p(y_i \mid \theta, \Omega, \sigma^2) =
 \log q(\eta_i) = \log \mathcal{N}(z_i; 0, I) -
 \log \left| \det \frac{\partial h_\psi}{\partial z_i} \right|,
 \tag{7}\]</span></span></p>
-<p>allowing <span class="math inline">\(q\)</span> to represent non-Gaussian posterior shapes (skew, multimodality) that a diagonal Gaussian cannot. Crossing both design axes gives four posterior configurations (free/amortized <span class="math inline">\(\times\)</span> Gaussian/flow); as detailed in the Results, one configuration (amortized + flow) is unstable and excluded from headline results.</p>
+<p>allowing <span class="math inline">\(q\)</span> to represent non-Gaussian posterior shapes (skew, multimodality) that a diagonal Gaussian cannot. Crossing both design axes gives four posterior configurations (free/amortized <span class="math inline">\(\times\)</span> Gaussian/flow); as detailed in the Results, one configuration (amortized + flow) is unstable and excluded from primary results.</p>
 </section>
 <section id="training-and-convergence" class="level3">
 <h3 class="anchored" data-anchor-id="training-and-convergence">Training and Convergence</h3>
-<p>All models are trained via stochastic gradient ascent on <span class="math inline">\(\mathrm{ELBO}^{(K)}\)</span> using Adam, with training continued adaptively until the estimated <span class="math inline">\(\Omega\)</span> parameters themselves plateau (rather than a fixed step count or loss-based stopping rule, which we found could converge in loss while <span class="math inline">\(\Omega\)</span> was still drifting), subject to a safety cap. The best-performing checkpoint by training objective is retained regardless of where training terminates, guarding against a fit wandering into and remaining in a poor basin late in training.</p>
+<p>All models are trained via stochastic gradient ascent on <span class="math inline">\(\mathrm{ELBO}^{(K)}\)</span> using Adam, with training continued adaptively until the estimated random-effect standard deviations <span class="math inline">\(\omega\)</span> themselves plateau (rather than a fixed step count or loss-based stopping rule, which we found could converge in loss while the <span class="math inline">\(\omega\)</span> estimates were still drifting), subject to a safety cap. The best-performing checkpoint by training objective is retained regardless of where training terminates, guarding against a fit wandering into and remaining in a poor basin late in training.</p>
 </section>
 <section id="simulation-study-design" class="level3">
 <h3 class="anchored" data-anchor-id="simulation-study-design">Simulation Study Design</h3>
-<p><strong>Linear tier.</strong> A one-compartment oral pharmacokinetic model with first-order absorption and elimination (analytic solution, no numerical integration required) is used as the primary simulated test bed, with population parameters drawn from typical published ranges (clearance <span class="math inline">\(CL\)</span>, volume <span class="math inline">\(V\)</span>, absorption rate <span class="math inline">\(k_a\)</span>, each with independent between-subject variability, and multiplicative residual error <span class="math inline">\(\sigma\)</span>). Two sampling designs are compared at matched <span class="math inline">\(K\)</span>: a dense design with six observation times per subject, and a sparse design with fewer, more widely spaced observations, to test whether the plain-ELBO bias interacts with the identifiability of the sampling schedule itself.</p>
+<p><strong>Linear tier.</strong> A one-compartment oral pharmacokinetic model with first-order absorption and elimination (analytic solution, no numerical integration required) is used as the primary simulated test bed, with population parameters drawn from typical published ranges (clearance <span class="math inline">\(CL\)</span>, volume <span class="math inline">\(V\)</span>, absorption rate <span class="math inline">\(k_a\)</span>, each with independent between-subject variability, and multiplicative residual standard deviation <span class="math inline">\(\sigma\)</span>). Two sampling designs are compared at matched <span class="math inline">\(K\)</span>: a dense design with six observation times per subject, and a sparse design with fewer, more widely spaced observations, to test whether the standard-ELBO bias interacts with the identifiability of the sampling schedule itself.</p>
 <p><strong>Nonlinear tier.</strong> A one-compartment intravenous bolus model with saturable, Michaelis-Menten elimination (<a href="#eq-michaelis-menten" class="quarto-xref">Equation&nbsp;8</a>),</p>
 <p><span id="eq-michaelis-menten"><span class="math display">\[
-\frac{dA}{dt} = -\frac{V_{max} \cdot (A/V)}{K_m + (A/V)}, \qquad
+\frac{dA}{dt} = -\frac{V_{\max} \cdot (A/V)}{K_m + (A/V)}, \qquad
 A(0) = \mathrm{Dose},
 \tag{8}\]</span></span></p>
-<p>has no closed-form solution and is integrated numerically (fixed-step RK4) at every training step, providing a genuinely nonlinear test of whether the plain-ELBO bias and its correction survive outside the analytically convenient linear case. Between-subject variability is placed on <span class="math inline">\(V_{max}\)</span> and <span class="math inline">\(V\)</span> only, with <span class="math inline">\(K_m\)</span> estimated as a fixed effect without a random effect. This restriction is used because placing independent between-subject variability on both Michaelis-Menten parameters simultaneously is a recognized cross-method identifiability difficulty in nonlinear mixed-effects modeling of saturable kinetics, not specific to variational inference, and because this was directly confirmed empirically in preliminary analyses (see Results). The dosing and sampling design (dose and an observation window spanning approximately 60 hours) was chosen specifically to ensure the simulated concentration trajectory crosses from the fully saturated regime into the first-order elimination regime within the observation window; simulation confirmed that a substantially shorter window remains entirely within the saturated regime, in which the Michaelis-Menten equation is structurally insensitive to <span class="math inline">\(K_m\)</span>, and does not permit identification of <span class="math inline">\(K_m\)</span>’s population value at all, independent of any variational-inference consideration.</p>
+<p>has no closed-form solution and is integrated numerically (fixed-step RK4) at every training step, providing a genuinely nonlinear test of whether the standard-ELBO bias and its correction survive outside the analytically convenient linear case. Between-subject variability is placed on <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(V\)</span> only, with <span class="math inline">\(K_m\)</span> estimated as a fixed effect without a random effect, both because placing independent between-subject variability on both Michaelis-Menten parameters simultaneously is a recognized cross-method identifiability difficulty in nonlinear mixed-effects modeling of saturable kinetics, not specific to variational inference, and because this was directly confirmed empirically in preliminary analyses (see Results). The dosing and sampling design (dose and an observation window spanning approximately 60 hours) was chosen specifically to ensure the simulated concentration trajectory crosses from the fully saturated regime into the first-order elimination regime within the observation window; simulation confirmed that a substantially shorter window remains entirely within the saturated regime, in which the Michaelis-Menten equation is structurally insensitive to <span class="math inline">\(K_m\)</span>, and does not permit identification of <span class="math inline">\(K_m\)</span>’s population value at all, independent of any variational-inference consideration.</p>
 <p><strong>Design consistency.</strong> Throughout, a single random seed generates one simulated dataset per replicate, and every estimation-method arm being compared (posterior architecture, family, <span class="math inline">\(K\)</span>) is fit to the identical dataset, so that differences between arms reflect only the estimation method and not sampling variability in the simulated data.</p>
 </section>
 <section id="real-data-validation" class="level3">
 <h3 class="anchored" data-anchor-id="real-data-validation">Real-Data Validation</h3>
-<p>Two independent, publicly available pharmacokinetic datasets are used to test whether the simulation-derived findings reproduce on real data, where, unlike simulation, no ground truth is available and the signature to look for is instead internal consistency: whether <span class="math inline">\(K=1\)</span> under-reports <span class="math inline">\(\Omega\)</span> relative to <span class="math inline">\(K=64\)</span> on the identical dataset, and whether fixed-effect estimates are externally plausible.</p>
+<p>Two independent, publicly available pharmacokinetic datasets are used to test whether the simulation-derived findings reproduce on real data, where, unlike simulation, no ground truth is available and the signature to look for is instead internal consistency: whether <span class="math inline">\(K=1\)</span> under-reports the random-effect standard deviations <span class="math inline">\(\omega\)</span> relative to <span class="math inline">\(K=64\)</span> on the identical dataset, and whether fixed-effect estimates are externally plausible.</p>
 <p><strong>Theophylline.</strong> The Boeckmann/Sheiner/Beal theophylline dataset <span class="citation" data-cites="boeckmann1994nonmem">(<a href="#ref-boeckmann1994nonmem" role="doc-biblioref">Boeckmann, Sheiner, and Beal 1994</a>)</span> (<span class="math inline">\(N=12\)</span> subjects, oral dosing) is loaded programmatically rather than transcribed by hand.</p>
 <p><strong>Warfarin.</strong> The classical warfarin pharmacokinetic/pharmacodynamic dataset <span class="citation" data-cites="oreilly1968studies">(<a href="#ref-oreilly1968studies" role="doc-biblioref">O’Reilly and Aggeler 1968</a>)</span> (<span class="math inline">\(N=33\)</span> subjects, single oral dose) is used, restricted to its pharmacokinetic (plasma concentration) endpoint; the dataset also contains a pharmacodynamic (prothrombin complex activity) endpoint not modeled here. Fitted fixed effects are compared directly against an independently published FOCEI fit of this dataset using the <code>nlmixr2</code> software package <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span>, which uses a more detailed two-step transit-compartment absorption structure than the simple first-order absorption model used here.</p>
 </section>
@@ -230,1471 +227,78 @@ A(0) = \mathrm{Dose},
 </section>
 <section id="comparison-to-established-estimation-methods" class="level3">
 <h3 class="anchored" data-anchor-id="comparison-to-established-estimation-methods">Comparison to Established Estimation Methods</h3>
-<p>FOCEI and SAEM baseline fits are obtained via the <code>nlmixr2</code> R package <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span>, using a structural model and log-normal residual error model matched exactly to the variational-inference side’s <code>OneCmtOral</code>, with identical parameterization (<span class="math inline">\(\log CL = \theta_{CL} +
-\eta_{CL}\)</span>, and analogously for <span class="math inline">\(V\)</span> and <span class="math inline">\(k_a\)</span>), and the same off-truth initial values used throughout this work for both estimation approaches, so that neither starts closer to the truth than the other. The comparison uses <span class="math inline">\(N=120\)</span> subjects and 20 replicate simulated datasets, matching the scale used for the linear-tier simulation study above; each replicate is fit once by FOCEI, once by SAEM, and by variational inference at <span class="math inline">\(K=1\)</span> and <span class="math inline">\(K=64\)</span>, all on the identical simulated dataset. Process CPU time was not reliably captured for the FOCEI and SAEM fits in the current baseline pipeline; therefore, the baseline comparison is restricted to estimation accuracy, and runtime is treated as a limitation rather than a reported result.</p>
+<p>FOCEI and SAEM baseline fits are obtained via the <code>nlmixr2</code> R package <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span>, using a structural model and log-normal residual error model matched exactly to the VI implementation’s <code>OneCmtOral</code>: identical parameterization (<span class="math inline">\(\log CL = \theta_{CL} +
+\eta_{CL}\)</span>, and analogously for <span class="math inline">\(V\)</span> and <span class="math inline">\(k_a\)</span>), and the same off-truth initial values used throughout this work for both estimation approaches, so that neither starts closer to the truth than the other. The comparison uses <span class="math inline">\(N=120\)</span> subjects and 20 replicate simulated datasets, matching the scale used for the linear-tier simulation study above; each replicate is fit once by FOCEI, once by SAEM, and by variational inference at <span class="math inline">\(K=1\)</span> and <span class="math inline">\(K=64\)</span>, all on the identical simulated dataset. Runtime is measured as process CPU time, not wall-clock time, for both the variational inference fits (Python’s <code>time.process_time()</code>) and the FOCEI/SAEM fits (R’s <code>proc.time()</code>, summing the user and system components), consistent throughout this work specifically because process CPU time is immune to operating-system sleep and largely immune to contention from other processes, unlike wall-clock time. Thread counts were not explicitly pinned to be identical between the PyTorch and R/BLAS processes; this is a limitation of the runtime comparison reported below (see Limitations), since incidental differences in parallelism could confound a small part of the observed speed difference.</p>
+<p>This runtime comparison is scoped deliberately to a single, simple, analytically tractable structural model, chosen specifically to allow a fair, matched comparison in which both sides evaluate the likelihood via a closed-form solution rather than numerical integration. It is not intended as the paper’s primary evidence for variational inference’s practical efficiency advantage, which is expected to be most pronounced for larger populations and structurally more complex models where FOCEI and SAEM’s per-iteration cost scales unfavorably, an advantage already established in the literature at larger scale (<span class="citation" data-cites="arruda2024amortized">Arruda et al. (<a href="#ref-arruda2024amortized" role="doc-biblioref">2024</a>)</span> report roughly two orders of magnitude speedup on their tested models). The purpose of the comparison reported here is narrower: to verify that the BSV-bias correction characterized throughout this work brings variational inference to FOCEI/SAEM-comparable accuracy without introducing a prohibitive runtime cost on a tractable model, not to make a general efficiency claim.</p>
 </section>
 <section id="software-and-computational-environment" class="level3">
 <h3 class="anchored" data-anchor-id="software-and-computational-environment">Software and Computational Environment</h3>
-<p>All variational inference models are implemented in PyTorch <span class="citation" data-cites="paszke2019pytorch">(<a href="#ref-paszke2019pytorch" role="doc-biblioref">Paszke et al. 2019</a>)</span>. FOCEI and SAEM baseline fits use the <code>nlmixr2</code> R package <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span>.</p>
+<p>All variational inference models are implemented in PyTorch <span class="citation" data-cites="paszke2019pytorch">(<a href="#ref-paszke2019pytorch" role="doc-biblioref">Paszke et al. 2019</a>)</span>. FOCEI and SAEM baseline fits use the <code>nlmixr2</code> R package <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span> (version 7.0.1, with <code>nlmixr2est</code> 7.0.2 and <code>rxode2</code> 5.1.6) under R version 4.5.3 (aarch64-apple-darwin20) on macOS.</p>
 </section>
 </section>
 <section id="results" class="level2">
 <h2 class="anchored" data-anchor-id="results">Results</h2>
-<section id="plain-elbo-variational-inference-underestimates-random-effect-variance" class="level3">
-<h3 class="anchored" data-anchor-id="plain-elbo-variational-inference-underestimates-random-effect-variance">Plain-ELBO Variational Inference Underestimates Random-Effect Variance</h3>
-<p>On the linear one-compartment model with known ground truth, plain-ELBO (<span class="math inline">\(K=1\)</span>) fitting systematically underestimates <span class="math inline">\(\Omega\)</span> across both free and amortized posteriors, with the bias substantially reduced by importance-weighting (<span class="math inline">\(K=64\)</span>), as shown in <a href="#fig-phase0-omega-bias" class="quarto-xref">Figure&nbsp;1</a> and summarized in <a href="#tbl-phase0-headline" class="quarto-xref">Table&nbsp;1</a>. Fixed effects (clearance, volume, absorption rate) show no corresponding bias at any <span class="math inline">\(K\)</span>, confirming that the phenomenon is specific to variance-component estimation rather than a general estimation problem with the variational approach (<a href="#tbl-phase0-fixed-effects" class="quarto-xref">Table&nbsp;2</a>).</p>
+<section id="standard-elbo-variational-inference-underestimates-between-subject-variability" class="level3">
+<h3 class="anchored" data-anchor-id="standard-elbo-variational-inference-underestimates-between-subject-variability">Standard-ELBO Variational Inference Underestimates Between-Subject Variability</h3>
+<p>On the linear one-compartment model with known ground truth, standard-ELBO (<span class="math inline">\(K=1\)</span>) fitting systematically underestimates between-subject variability under both free and amortized posteriors, with the bias substantially reduced by importance weighting at larger <span class="math inline">\(K\)</span> (<a href="#fig-phase0-omega-bias" class="quarto-xref">Figure&nbsp;1</a> and <a href="#supptbl-phase0-headline" class="quarto-xref">Table S1</a>). Structural fixed effects show much less dependence on <span class="math inline">\(K\)</span>. Clearance and volume remain comparatively stable, whereas <span class="math inline">\(k_a\)</span> is consistently underestimated by a similar amount across <span class="math inline">\(K\)</span>, indicating a persistent bias that is distinct from the strongly <span class="math inline">\(K\)</span>-dependent behavior of the random-effect parameters. Residual-error estimates show greater <span class="math inline">\(K\)</span>-dependence in some settings, consistent with partial compensation between residual and between-subject variability (<a href="#supptbl-phase0-fixed-effects" class="quarto-xref">Table S2</a>; <a href="#suppfig-phase0-fixed-effects" class="quarto-xref">Figure S1</a>).</p>
 <div id="fig-phase0-omega-bias" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-phase0-omega-bias-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="publication/figures/fig_phase0_omega_bias.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-phase0-omega-bias-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;1: Omega bias by <span class="math inline">\(K\)</span>, shown separately for free and amortized posteriors under the Gaussian variational family. The dashed line marks zero bias. Error bars show the standard error across replicates.
+Figure&nbsp;1: random-effect SD bias by <span class="math inline">\(K\)</span>, shown separately for free and amortized posteriors under the Gaussian variational family. The dashed line marks zero bias. Error bars show the standard error across replicates.
 </figcaption>
-</figure>
-</div>
-<div id="tbl-phase0-headline" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-tbl figure">
-<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-phase0-headline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;1: Mean relative bias (%) in <span class="math inline">\(\Omega\)</span> by posterior architecture and <span class="math inline">\(K\)</span>.
-</figcaption>
-<div aria-describedby="tbl-phase0-headline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<colgroup>
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>index</th>
-<th>posterior</th>
-<th>K</th>
-<th>param</th>
-<th>mean_bias_pct</th>
-<th>sd_bias_pct</th>
-<th>n_estimates</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>0</td>
-<td>amortized</td>
-<td>1</td>
-<td>om_CL</td>
-<td>-0.71</td>
-<td>5.91</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>1</td>
-<td>amortized</td>
-<td>1</td>
-<td>om_V</td>
-<td>-47.83</td>
-<td>39.58</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>2</td>
-<td>amortized</td>
-<td>1</td>
-<td>om_ka</td>
-<td>-13.45</td>
-<td>35.79</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>3</td>
-<td>amortized</td>
-<td>8</td>
-<td>om_CL</td>
-<td>0.17</td>
-<td>7.51</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>4</td>
-<td>amortized</td>
-<td>8</td>
-<td>om_V</td>
-<td>-16.5</td>
-<td>14.09</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>5</td>
-<td>amortized</td>
-<td>8</td>
-<td>om_ka</td>
-<td>-5.79</td>
-<td>16.88</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>6</td>
-<td>amortized</td>
-<td>64</td>
-<td>om_CL</td>
-<td>-0.33</td>
-<td>7.05</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>7</td>
-<td>amortized</td>
-<td>64</td>
-<td>om_V</td>
-<td>-9.67</td>
-<td>13.43</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>8</td>
-<td>amortized</td>
-<td>64</td>
-<td>om_ka</td>
-<td>-2.61</td>
-<td>13.74</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>9</td>
-<td>free</td>
-<td>1</td>
-<td>om_CL</td>
-<td>-1.67</td>
-<td>6.34</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>10</td>
-<td>free</td>
-<td>1</td>
-<td>om_V</td>
-<td>-47.43</td>
-<td>42.03</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>11</td>
-<td>free</td>
-<td>1</td>
-<td>om_ka</td>
-<td>-8.91</td>
-<td>33.74</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>12</td>
-<td>free</td>
-<td>8</td>
-<td>om_CL</td>
-<td>0.25</td>
-<td>7.49</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>13</td>
-<td>free</td>
-<td>8</td>
-<td>om_V</td>
-<td>-16.38</td>
-<td>13.58</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>14</td>
-<td>free</td>
-<td>8</td>
-<td>om_ka</td>
-<td>-6.75</td>
-<td>16.45</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>15</td>
-<td>free</td>
-<td>64</td>
-<td>om_CL</td>
-<td>0.42</td>
-<td>7.43</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>16</td>
-<td>free</td>
-<td>64</td>
-<td>om_V</td>
-<td>-9.0</td>
-<td>12.25</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>17</td>
-<td>free</td>
-<td>64</td>
-<td>om_ka</td>
-<td>-2.03</td>
-<td>12.11</td>
-<td>8</td>
-</tr>
-</tbody>
-</table>
-</div>
-</figure>
-</div>
-<div id="tbl-phase0-fixed-effects" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-tbl figure">
-<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-phase0-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;2: Mean relative bias (%) in fixed effects and residual error, by posterior architecture and <span class="math inline">\(K\)</span>, as a validation check against the <span class="math inline">\(\Omega\)</span> table above: fixed effects are expected to remain near zero bias at every <span class="math inline">\(K\)</span>, unlike <span class="math inline">\(\Omega\)</span>.
-</figcaption>
-<div aria-describedby="tbl-phase0-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<colgroup>
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>index</th>
-<th>posterior</th>
-<th>K</th>
-<th>param</th>
-<th>mean_bias_pct</th>
-<th>sd_bias_pct</th>
-<th>n_estimates</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>0</td>
-<td>amortized</td>
-<td>1</td>
-<td>CL</td>
-<td>-0.48</td>
-<td>2.85</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>1</td>
-<td>amortized</td>
-<td>1</td>
-<td>V</td>
-<td>-0.05</td>
-<td>3.32</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>2</td>
-<td>amortized</td>
-<td>1</td>
-<td>ka</td>
-<td>-3.94</td>
-<td>4.48</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>3</td>
-<td>amortized</td>
-<td>1</td>
-<td>sigma</td>
-<td>15.34</td>
-<td>6.29</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>4</td>
-<td>amortized</td>
-<td>8</td>
-<td>CL</td>
-<td>-0.04</td>
-<td>4.16</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>5</td>
-<td>amortized</td>
-<td>8</td>
-<td>V</td>
-<td>-0.41</td>
-<td>2.99</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>6</td>
-<td>amortized</td>
-<td>8</td>
-<td>ka</td>
-<td>-4.07</td>
-<td>3.17</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>7</td>
-<td>amortized</td>
-<td>8</td>
-<td>sigma</td>
-<td>0.31</td>
-<td>2.85</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>8</td>
-<td>amortized</td>
-<td>64</td>
-<td>CL</td>
-<td>-0.32</td>
-<td>3.49</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>9</td>
-<td>amortized</td>
-<td>64</td>
-<td>V</td>
-<td>-0.24</td>
-<td>2.89</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>10</td>
-<td>amortized</td>
-<td>64</td>
-<td>ka</td>
-<td>-2.92</td>
-<td>3.89</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>11</td>
-<td>amortized</td>
-<td>64</td>
-<td>sigma</td>
-<td>-1.21</td>
-<td>3.72</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>12</td>
-<td>free</td>
-<td>1</td>
-<td>CL</td>
-<td>0.52</td>
-<td>3.45</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>13</td>
-<td>free</td>
-<td>1</td>
-<td>V</td>
-<td>-0.51</td>
-<td>3.69</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>14</td>
-<td>free</td>
-<td>1</td>
-<td>ka</td>
-<td>-4.03</td>
-<td>5.3</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>15</td>
-<td>free</td>
-<td>1</td>
-<td>sigma</td>
-<td>9.92</td>
-<td>3.71</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>16</td>
-<td>free</td>
-<td>8</td>
-<td>CL</td>
-<td>1.28</td>
-<td>4.49</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>17</td>
-<td>free</td>
-<td>8</td>
-<td>V</td>
-<td>-0.25</td>
-<td>2.66</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>18</td>
-<td>free</td>
-<td>8</td>
-<td>ka</td>
-<td>-3.2</td>
-<td>3.43</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>19</td>
-<td>free</td>
-<td>8</td>
-<td>sigma</td>
-<td>-0.1</td>
-<td>3.46</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>20</td>
-<td>free</td>
-<td>64</td>
-<td>CL</td>
-<td>0.2</td>
-<td>3.44</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>21</td>
-<td>free</td>
-<td>64</td>
-<td>V</td>
-<td>-0.27</td>
-<td>2.71</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>22</td>
-<td>free</td>
-<td>64</td>
-<td>ka</td>
-<td>-3.13</td>
-<td>3.15</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>23</td>
-<td>free</td>
-<td>64</td>
-<td>sigma</td>
-<td>-1.15</td>
-<td>3.49</td>
-<td>8</td>
-</tr>
-</tbody>
-</table>
-</div>
 </figure>
 </div>
 </section>
 <section id="sparse-sampling-designs-and-richer-variational-families" class="level3">
 <h3 class="anchored" data-anchor-id="sparse-sampling-designs-and-richer-variational-families">Sparse Sampling Designs and Richer Variational Families</h3>
-<p>Sparse sampling designs roughly double the plain-ELBO bias relative to dense sampling at matched <span class="math inline">\(K\)</span>, consistent with the mechanism being one of identifiability: whichever random effect the sampling design least constrains shrinks the most under plain-ELBO training. Independently, a richer variational family (normalizing flow) closes most of the gap that importance-weighting alone leaves at low <span class="math inline">\(K\)</span>, with the free posterior under the flow family showing negligible bias even at <span class="math inline">\(K=1\)</span> in the dense design (<a href="#fig-phase1-grid" class="quarto-xref">Figure&nbsp;2</a> and <a href="#tbl-phase1-q2q4" class="quarto-xref">Table&nbsp;3</a>). Fixed-effect and residual-error estimates remain near the data-generating values across the same grid (<a href="#tbl-phase1-q2q4-fixed-effects" class="quarto-xref">Table&nbsp;4</a>).</p>
+<p>Sparse sampling designs roughly double the standard-ELBO bias relative to dense sampling at matched <span class="math inline">\(K\)</span>, consistent with the mechanism being one of identifiability: whichever random effect the sampling design least constrains shrinks the most under standard-ELBO training. Independently, a richer variational family (normalizing flow) closes most of the gap that importance-weighting alone leaves at low <span class="math inline">\(K\)</span>, with the free posterior under the flow family showing negligible bias even at <span class="math inline">\(K=1\)</span> in the dense design (<a href="#fig-phase1-grid" class="quarto-xref">Figure&nbsp;2</a> and <a href="#supptbl-phase1-q2q4" class="quarto-xref">Table S3</a>). Structural fixed-effect estimates are substantially less sensitive to <span class="math inline">\(K\)</span> across the same grid, whereas residual-error estimates show greater dependence on <span class="math inline">\(K\)</span> in some panels, consistent with redistribution of unexplained variability between residual error and between-subject random effects (<a href="#supptbl-phase1-q2q4-fixed-effects" class="quarto-xref">Table S4</a>; <a href="#suppfig-phase1-fixed-effects" class="quarto-xref">Figure S2</a>).</p>
 <div id="fig-phase1-grid" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-phase1-grid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="publication/figures/fig_phase1_grid.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-phase1-grid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2: Omega bias by <span class="math inline">\(K\)</span>, faceted by sampling design (rows) and variational family (columns), with one line per posterior architecture in each panel.
+Figure&nbsp;2: random-effect SD bias by <span class="math inline">\(K\)</span>, faceted by sampling design (rows) and variational family (columns), with one line per posterior architecture in each panel.
 </figcaption>
 </figure>
 </div>
-<div id="tbl-phase1-q2q4" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-tbl figure">
-<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-phase1-q2q4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;3: Mean relative bias (%) in <span class="math inline">\(\Omega\)</span> by sampling design, posterior architecture, variational family, and <span class="math inline">\(K\)</span>.
-</figcaption>
-<div aria-describedby="tbl-phase1-q2q4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<colgroup>
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>index</th>
-<th>scenario</th>
-<th>posterior</th>
-<th>family</th>
-<th>K</th>
-<th>param</th>
-<th>mean_bias_pct</th>
-<th>sd_bias_pct</th>
-<th>n_estimates</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>0</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>om_CL</td>
-<td>-0.08</td>
-<td>7.15</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>1</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>om_V</td>
-<td>-1.02</td>
-<td>10.11</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>2</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>om_ka</td>
-<td>-3.0</td>
-<td>8.77</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>3</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>om_CL</td>
-<td>-0.07</td>
-<td>7.35</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>4</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>om_V</td>
-<td>-1.21</td>
-<td>10.32</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>5</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>om_ka</td>
-<td>-1.52</td>
-<td>8.44</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>6</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>om_CL</td>
-<td>0.16</td>
-<td>6.99</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>7</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>om_V</td>
-<td>-0.58</td>
-<td>10.55</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>8</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>om_ka</td>
-<td>-0.79</td>
-<td>8.27</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>9</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>om_CL</td>
-<td>-1.16</td>
-<td>7.51</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>10</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>om_V</td>
-<td>-0.93</td>
-<td>11.02</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>11</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>om_ka</td>
-<td>-19.27</td>
-<td>19.96</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>12</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>om_CL</td>
-<td>-0.9</td>
-<td>7.54</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>13</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>om_V</td>
-<td>-1.7</td>
-<td>12.03</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>14</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>om_ka</td>
-<td>-18.06</td>
-<td>26.08</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>15</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>om_CL</td>
-<td>-0.67</td>
-<td>7.63</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>16</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>om_V</td>
-<td>-0.02</td>
-<td>10.54</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>17</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>om_ka</td>
-<td>-5.21</td>
-<td>20.92</td>
-<td>30</td>
-</tr>
-</tbody>
-</table>
-</div>
-</figure>
-</div>
-<div id="tbl-phase1-q2q4-fixed-effects" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-tbl figure">
-<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-phase1-q2q4-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;4: Mean relative bias (%) in fixed effects and residual error, same grouping as above, as a validation check.
-</figcaption>
-<div aria-describedby="tbl-phase1-q2q4-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<colgroup>
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-<col style="width: 11%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>index</th>
-<th>scenario</th>
-<th>posterior</th>
-<th>family</th>
-<th>K</th>
-<th>param</th>
-<th>mean_bias_pct</th>
-<th>sd_bias_pct</th>
-<th>n_estimates</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>0</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>CL</td>
-<td>-0.54</td>
-<td>3.04</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>1</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>V</td>
-<td>0.31</td>
-<td>2.27</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>2</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>ka</td>
-<td>0.15</td>
-<td>4.16</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>3</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>sigma</td>
-<td>0.96</td>
-<td>3.31</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>4</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>CL</td>
-<td>-0.09</td>
-<td>2.44</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>5</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>V</td>
-<td>0.02</td>
-<td>2.28</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>6</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>ka</td>
-<td>0.1</td>
-<td>4.06</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>7</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>sigma</td>
-<td>0.11</td>
-<td>4.09</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>8</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>CL</td>
-<td>-0.52</td>
-<td>2.48</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>9</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>V</td>
-<td>-0.2</td>
-<td>2.5</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>10</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>ka</td>
-<td>0.9</td>
-<td>4.39</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>11</td>
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>sigma</td>
-<td>-0.28</td>
-<td>3.8</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>12</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>CL</td>
-<td>0.16</td>
-<td>2.76</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>13</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>V</td>
-<td>0.24</td>
-<td>3.06</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>14</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>ka</td>
-<td>-0.44</td>
-<td>5.85</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>15</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td>sigma</td>
-<td>6.58</td>
-<td>8.71</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>16</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>CL</td>
-<td>-0.1</td>
-<td>2.49</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>17</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>V</td>
-<td>0.29</td>
-<td>2.88</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>18</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>ka</td>
-<td>0.18</td>
-<td>6.36</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>19</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td>sigma</td>
-<td>5.06</td>
-<td>8.67</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>20</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>CL</td>
-<td>-0.1</td>
-<td>2.68</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>21</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>V</td>
-<td>0.04</td>
-<td>3.11</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>22</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>ka</td>
-<td>0.68</td>
-<td>6.39</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>23</td>
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td>sigma</td>
-<td>1.45</td>
-<td>8.57</td>
-<td>30</td>
-</tr>
-</tbody>
-</table>
-</div>
-</figure>
-</div>
-<p>One posterior configuration, an amortized posterior combined with the normalizing-flow family, is unstable across every tested value of <span class="math inline">\(K\)</span> and is excluded from the results above. Rather than a <span class="math inline">\(K=1\)</span>-specific problem, this combination shows a comparable rate of flagged, substantially divergent fits at <span class="math inline">\(K=1\)</span>, <span class="math inline">\(K=8\)</span>, and <span class="math inline">\(K=64\)</span> alike; higher <span class="math inline">\(K\)</span> changes the character of the failure (from occasional gross divergence to more consistent convergence onto a stable but incorrect estimate) without reducing its frequency. We attribute this to the amortized encoder’s output serving a double role under this configuration. It simultaneously defines the flow’s base distribution and its conditioning input, creating a moving optimization target not present when either the posterior is not amortized or the family is not a flow.</p>
+<p>One posterior configuration, amortized posterior combined with the normalizing-flow family, is unstable across every tested value of <span class="math inline">\(K\)</span> and is excluded from the results above. Rather than a <span class="math inline">\(K=1\)</span>-specific problem, this combination shows a comparable rate of flagged, substantially divergent fits at <span class="math inline">\(K=1\)</span>, <span class="math inline">\(K=8\)</span>, and <span class="math inline">\(K=64\)</span> alike; higher <span class="math inline">\(K\)</span> changes the character of the failure (from occasional gross divergence to more consistent convergence onto a stable but incorrect estimate) without reducing its frequency. We attribute this to the amortized encoder’s output serving a double role under this configuration, simultaneously defining the flow’s base distribution and its conditioning input, creating a moving optimization target not present when either the posterior is not amortized or the family is not a flow. A preliminary architectural variant decoupling these two roles, following the design used by <span class="citation" data-cites="arruda2024amortized">Arruda et al. (<a href="#ref-arruda2024amortized" role="doc-biblioref">2024</a>)</span>, is discussed as future work in the Discussion.</p>
 </section>
 <section id="nonlinear-elimination-kinetics" class="level3">
 <h3 class="anchored" data-anchor-id="nonlinear-elimination-kinetics">Nonlinear Elimination Kinetics</h3>
-<p>Extending to the Michaelis-Menten elimination model, an initial attempt to place between-subject variability on both <span class="math inline">\(V_{max}\)</span> and <span class="math inline">\(K_m\)</span> simultaneously showed severe, stable bias in <span class="math inline">\(\Omega_{K_m}\)</span> (on the order of <span class="math inline">\(-80\%\)</span> to <span class="math inline">\(-90\%\)</span>) that did not improve with additional training steps or a redesigned sampling window, while <span class="math inline">\(\Omega_{V_{max}}\)</span>’s bias remained modest throughout. This pattern is consistent with a genuine structural identifiability limitation of estimating variability on both Michaelis-Menten parameters simultaneously, a difficulty recognized in standard pharmacometric practice for saturable-kinetics models and not specific to variational inference. Restricting between-subject variability to <span class="math inline">\(V_{max}\)</span> and <span class="math inline">\(V\)</span> only, with <span class="math inline">\(K_m\)</span> retained as a population-level fixed effect, resolves this: fixed effects recover cleanly, and the same <span class="math inline">\(K=1\)</span>-to-<span class="math inline">\(K=64\)</span> shrinkage-and-correction signature seen in the linear tier reproduces on <span class="math inline">\(\Omega_{V_{max}}\)</span> and <span class="math inline">\(\Omega_V\)</span> (<a href="#fig-phase1-nonlinear" class="quarto-xref">Figure&nbsp;3</a> and <a href="#tbl-phase1-q3-nonlinear" class="quarto-xref">Table&nbsp;5</a>).</p>
+<p>Extending to the Michaelis-Menten elimination model, an initial attempt to place between-subject variability on both <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(K_m\)</span> simultaneously showed severe, stable bias in <span class="math inline">\(\omega_{K_m}\)</span> (on the order of <span class="math inline">\(-80\%\)</span> to <span class="math inline">\(-90\%\)</span>) that did not improve with additional training steps or a redesigned sampling window, while <span class="math inline">\(\omega_{V_{\max}}\)</span>’s bias remained modest throughout, a pattern consistent with a genuine structural identifiability limitation of estimating variability on both Michaelis-Menten parameters simultaneously, a difficulty recognized in standard pharmacometric practice for saturable-kinetics models and not specific to variational inference. Restricting between-subject variability to <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(V\)</span> only, with <span class="math inline">\(K_m\)</span> retained as a population-level fixed effect, resolves this: fixed effects recover cleanly, and the same <span class="math inline">\(K=1\)</span>-to-<span class="math inline">\(K=64\)</span> shrinkage-and-correction signature seen in the linear tier reproduces on <span class="math inline">\(\omega_V\)</span>; <span class="math inline">\(\omega_{V_{\max}}\)</span>’s bias is small and essentially flat across <span class="math inline">\(K\)</span> in this design, with little shrinkage at <span class="math inline">\(K=1\)</span> to correct (<a href="#fig-phase1-nonlinear" class="quarto-xref">Figure&nbsp;3</a> and <a href="#supptbl-phase1-q3-nonlinear" class="quarto-xref">Table S5</a>).</p>
 <div id="fig-phase1-nonlinear" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-phase1-nonlinear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="publication/figures/fig_phase1_nonlinear.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-phase1-nonlinear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;3: Omega bias by <span class="math inline">\(K\)</span> for the Michaelis-Menten elimination model, free posterior, Gaussian family, restricted to <span class="math inline">\(V_{max}\)</span> and <span class="math inline">\(V\)</span> random effects.
+Figure&nbsp;3: Random-effect SD bias by <span class="math inline">\(K\)</span> for the Michaelis-Menten elimination model, free posterior, Gaussian family, restricted to <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(V\)</span> random effects.
 </figcaption>
 </figure>
 </div>
-<div id="tbl-phase1-q3-nonlinear" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-tbl figure">
-<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-phase1-q3-nonlinear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;5: Mean parameter estimates, ground-truth values, relative bias (%), and converged fraction for the Michaelis-Menten elimination model.
-</figcaption>
-<div aria-describedby="tbl-phase1-q3-nonlinear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<colgroup>
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 10%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>index</th>
-<th>posterior</th>
-<th>family</th>
-<th>K</th>
-<th>param</th>
-<th>mean_estimate</th>
-<th>truth</th>
-<th>mean_bias_pct</th>
-<th>n</th>
-<th>frac_converged</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>0</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td>Km</td>
-<td>1.96</td>
-<td>2.0</td>
-<td>-1.984</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>1</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td>V</td>
-<td>30.145</td>
-<td>30.0</td>
-<td>0.483</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="odd">
-<td>2</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td>Vmax</td>
-<td>8.011</td>
-<td>8.0</td>
-<td>0.134</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>3</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td>om_V</td>
-<td>0.192</td>
-<td>0.2</td>
-<td>-3.929</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="odd">
-<td>4</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td>om_Vmax</td>
-<td>0.301</td>
-<td>0.3</td>
-<td>0.352</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>5</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td>sigma</td>
-<td>0.201</td>
-<td>0.2</td>
-<td>0.719</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="odd">
-<td>6</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td>Km</td>
-<td>1.976</td>
-<td>2.0</td>
-<td>-1.196</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>7</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td>V</td>
-<td>30.113</td>
-<td>30.0</td>
-<td>0.376</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="odd">
-<td>8</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td>Vmax</td>
-<td>7.898</td>
-<td>8.0</td>
-<td>-1.279</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>9</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td>om_V</td>
-<td>0.198</td>
-<td>0.2</td>
-<td>-1.066</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="odd">
-<td>10</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td>om_Vmax</td>
-<td>0.3</td>
-<td>0.3</td>
-<td>0.129</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>11</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td>sigma</td>
-<td>0.198</td>
-<td>0.2</td>
-<td>-1.062</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="odd">
-<td>12</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td>Km</td>
-<td>1.983</td>
-<td>2.0</td>
-<td>-0.867</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>13</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td>V</td>
-<td>30.299</td>
-<td>30.0</td>
-<td>0.996</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="odd">
-<td>14</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td>Vmax</td>
-<td>7.886</td>
-<td>8.0</td>
-<td>-1.421</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>15</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td>om_V</td>
-<td>0.2</td>
-<td>0.2</td>
-<td>0.137</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="odd">
-<td>16</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td>om_Vmax</td>
-<td>0.299</td>
-<td>0.3</td>
-<td>-0.207</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-<tr class="even">
-<td>17</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td>sigma</td>
-<td>0.196</td>
-<td>0.2</td>
-<td>-2.043</td>
-<td>20</td>
-<td>1.0</td>
-</tr>
-</tbody>
-</table>
-</div>
-</figure>
-</div>
-<p>We additionally tested the amortized posterior on this same nonlinear model and found a distinct, substantial instability. This failure mode is separate from the amortized-flow instability described above because no flow is involved. In this setting, <span class="math inline">\(\Omega\)</span> bias increased rather than decreased with <span class="math inline">\(K\)</span>, and a non-trivial fraction of fits failed to converge within the training budget. Results using the amortized posterior on this model are therefore excluded from the table and figure above.</p>
+<p>We additionally tested the amortized posterior on this same nonlinear model and found a distinct, substantial instability, not the amortized-flow instability described above, since no flow is involved, with bias in the random-effect standard deviations increasing rather than decreasing with <span class="math inline">\(K\)</span> and a non-trivial fraction of fits failing to converge within the training budget. Results using the amortized posterior on this model are excluded from the table and figure above and discussed further, with a working hypothesis, in the Discussion below.</p>
 </section>
 <section id="real-data-validation-1" class="level3">
 <h3 class="anchored" data-anchor-id="real-data-validation-1">Real-Data Validation</h3>
-<p>Both real pharmacokinetic datasets reproduce the plain-ELBO shrinkage signature identified in simulation: <span class="math inline">\(K=1\)</span> reports smaller <span class="math inline">\(\Omega\)</span> than <span class="math inline">\(K=64\)</span> on the identical dataset, with the clearance random effect showing the least shrinkage of the three, consistent with clearance being the most robustly identified parameter throughout the simulated results above (<a href="#fig-realdata-k1-vs-khigh" class="quarto-xref">Figure&nbsp;4</a> and <a href="#tbl-realdata-k1-vs-khigh" class="quarto-xref">Table&nbsp;6</a>). On warfarin, fixed-effect estimates for clearance and volume of distribution fall inside the published 95% confidence intervals of an independently fitted FOCEI model on the same data <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span> despite this work’s simpler one-compartment, single-step absorption structure versus the published model’s two-step transit-compartment absorption. This provides external agreement on the parameters that should agree given the shared elimination structure, not merely a directional match.</p>
+<p>Both real pharmacokinetic datasets reproduce the standard-ELBO shrinkage signature identified in simulation: <span class="math inline">\(K=1\)</span> reports smaller random-effect standard deviations than <span class="math inline">\(K=64\)</span> on the identical dataset, with the clearance random effect showing the least shrinkage of the three, consistent with clearance being the most robustly identified parameter throughout the simulated results above (<a href="#fig-realdata-k1-vs-khigh" class="quarto-xref">Figure&nbsp;4</a> and <a href="#supptbl-realdata-k1-vs-khigh" class="quarto-xref">Table S6</a>). On warfarin, fixed-effect estimates for clearance and volume of distribution fall inside the published 95% confidence intervals of an independently fitted FOCEI model on the same data <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span> despite this work’s simpler one-compartment, single-step absorption structure versus the published model’s two-step transit-compartment absorption, a real, external agreement on the parameters that should agree given the shared elimination structure, not merely a directional match.</p>
 <div id="fig-realdata-k1-vs-khigh" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-realdata-k1-vs-khigh-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="publication/figures/fig_realdata_k1_vs_khigh.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-realdata-k1-vs-khigh-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;4: Omega estimates at <span class="math inline">\(K=1\)</span> versus <span class="math inline">\(K=64\)</span> for each dataset, by parameter.
+Figure&nbsp;4: between-subject variability estimates at <span class="math inline">\(K=1\)</span> versus <span class="math inline">\(K=64\)</span> for each dataset, by parameter.
 </figcaption>
-</figure>
-</div>
-<div id="tbl-realdata-k1-vs-khigh" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-tbl figure">
-<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-realdata-k1-vs-khigh-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;6: Parameter estimates at <span class="math inline">\(K=1\)</span> versus <span class="math inline">\(K=64\)</span> for both real datasets, and their percent difference.
-</figcaption>
-<div aria-describedby="tbl-realdata-k1-vs-khigh-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<colgroup>
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>dataset</th>
-<th>param</th>
-<th>K_low</th>
-<th>estimate_K_low</th>
-<th>K_high</th>
-<th>estimate_K_high</th>
-<th>pct_diff_low_vs_high</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>theophylline</td>
-<td>CL</td>
-<td>1</td>
-<td>0.0399780823466852</td>
-<td>64</td>
-<td>0.0403340132607083</td>
-<td>-0.88</td>
-</tr>
-<tr class="even">
-<td>theophylline</td>
-<td>V</td>
-<td>1</td>
-<td>0.4624260144796536</td>
-<td>64</td>
-<td>0.4517957541038435</td>
-<td>2.35</td>
-</tr>
-<tr class="odd">
-<td>theophylline</td>
-<td>ka</td>
-<td>1</td>
-<td>1.285871545824862</td>
-<td>64</td>
-<td>1.3432511476026092</td>
-<td>-4.27</td>
-</tr>
-<tr class="even">
-<td>theophylline</td>
-<td>om_CL</td>
-<td>1</td>
-<td>0.2449826753381065</td>
-<td>64</td>
-<td>0.25468847097044</td>
-<td>-3.81</td>
-</tr>
-<tr class="odd">
-<td>theophylline</td>
-<td>om_V</td>
-<td>1</td>
-<td>0.0921426595674207</td>
-<td>64</td>
-<td>0.1127060108431509</td>
-<td>-18.25</td>
-</tr>
-<tr class="even">
-<td>theophylline</td>
-<td>om_ka</td>
-<td>1</td>
-<td>0.6463371431773433</td>
-<td>64</td>
-<td>0.6819586125133786</td>
-<td>-5.22</td>
-</tr>
-<tr class="odd">
-<td>theophylline</td>
-<td>sigma</td>
-<td>1</td>
-<td>0.1801019692209916</td>
-<td>64</td>
-<td>0.1718191712865529</td>
-<td>4.82</td>
-</tr>
-<tr class="even">
-<td>warfarin</td>
-<td>CL</td>
-<td>1</td>
-<td>0.1324849190874699</td>
-<td>64</td>
-<td>0.1295015835469587</td>
-<td>2.3</td>
-</tr>
-<tr class="odd">
-<td>warfarin</td>
-<td>V</td>
-<td>1</td>
-<td>7.938745771567575</td>
-<td>64</td>
-<td>8.019921779494958</td>
-<td>-1.01</td>
-</tr>
-<tr class="even">
-<td>warfarin</td>
-<td>ka</td>
-<td>1</td>
-<td>0.6168926858265219</td>
-<td>64</td>
-<td>0.6366073514523212</td>
-<td>-3.1</td>
-</tr>
-<tr class="odd">
-<td>warfarin</td>
-<td>om_CL</td>
-<td>1</td>
-<td>0.2783230432587028</td>
-<td>64</td>
-<td>0.276191849365181</td>
-<td>0.77</td>
-</tr>
-<tr class="even">
-<td>warfarin</td>
-<td>om_V</td>
-<td>1</td>
-<td>0.1895398792983538</td>
-<td>64</td>
-<td>0.2073812546980456</td>
-<td>-8.6</td>
-</tr>
-<tr class="odd">
-<td>warfarin</td>
-<td>om_ka</td>
-<td>1</td>
-<td>0.811148050786541</td>
-<td>64</td>
-<td>0.9777563030380608</td>
-<td>-17.04</td>
-</tr>
-<tr class="even">
-<td>warfarin</td>
-<td>sigma</td>
-<td>1</td>
-<td>0.2072281419688492</td>
-<td>64</td>
-<td>0.2029462916515008</td>
-<td>2.11</td>
-</tr>
-</tbody>
-</table>
-</div>
 </figure>
 </div>
 </section>
 <section id="diagnosing-fit-quality-via-effective-sample-size" class="level3">
 <h3 class="anchored" data-anchor-id="diagnosing-fit-quality-via-effective-sample-size">Diagnosing Fit Quality via Effective Sample Size</h3>
-<p>Mean importance-sampling effective sample size cleanly separates deliberately under-trained fits from well-converged fits on matched simulated data (<a href="#fig-psis-ess" class="quarto-xref">Figure&nbsp;5</a> and <a href="#tbl-psis-ess" class="quarto-xref">Table&nbsp;7</a>), supporting its use as a practical diagnostic on real data where no ground truth is available to check convergence directly. A fixed per-subject tail-count threshold does not separate the two groups as cleanly, reflecting genuine subject-to-subject variation in fit difficulty independent of overall training adequacy; we therefore recommend the aggregate (mean or median) ESS as the primary diagnostic, not a fixed per-subject threshold.</p>
+<p>Mean importance-sampling effective sample size cleanly separates deliberately under-trained fits from well-converged fits on matched simulated data (<a href="#fig-psis-ess" class="quarto-xref">Figure&nbsp;5</a> and <a href="#supptbl-psis-ess" class="quarto-xref">Table S7</a>), supporting its use as a practical diagnostic on real data where no ground truth is available to check convergence directly. A fixed per-subject tail-count threshold does not separate the two groups as cleanly, reflecting genuine subject-to-subject variation in fit difficulty independent of overall training adequacy; we therefore recommend the aggregate (mean or median) ESS as the primary diagnostic, not a fixed per-subject threshold.</p>
 <div id="fig-psis-ess" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-psis-ess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -1705,107 +309,30 @@ Figure&nbsp;5: Per-subject effective sample size distribution, well-converged ve
 </figcaption>
 </figure>
 </div>
-<div id="tbl-psis-ess" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-tbl figure">
-<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-psis-ess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;7: Aggregate effective sample size by fit-quality arm.
-</figcaption>
-<div aria-describedby="tbl-psis-ess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<thead>
-<tr class="header">
-<th>arm</th>
-<th>mean</th>
-<th>median</th>
-<th>min</th>
-<th>max</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>bad</td>
-<td>1204.2</td>
-<td>1175.7</td>
-<td>174.7</td>
-<td>2846.5</td>
-</tr>
-<tr class="even">
-<td>good</td>
-<td>1788.7</td>
-<td>1790.8</td>
-<td>10.7</td>
-<td>3217.0</td>
-</tr>
-</tbody>
-</table>
-</div>
-</figure>
-</div>
 </section>
 <section id="validity-of-the-recovered-likelihood-for-model-selection" class="level3">
 <h3 class="anchored" data-anchor-id="validity-of-the-recovered-likelihood-for-model-selection">Validity of the Recovered Likelihood for Model Selection</h3>
-<p>Likelihood-ratio tests built on the free posterior’s recovered marginal likelihood are miscalibrated against the correct Self-Liang boundary mixture reference for testing whether a random effect’s variance is zero, with substantially too few null replicates landing at the theoretical boundary (<a href="#fig-deltaofv-calibration" class="quarto-xref">Figure&nbsp;6</a> and <a href="#tbl-deltaofv-calibration" class="quarto-xref">Table&nbsp;8</a>). This is not explained by insufficient post-hoc importance-sampling precision (increasing the post-hoc evaluation sample size by 5-fold left the calibration essentially unchanged, including a specific highly discrepant replicate’s <span class="math inline">\(\Delta\mathrm{OFV}\)</span> value, which stayed nearly frozen despite the increase, consistent with a systematic rather than finite-sample-noise effect) nor by non-convergence. Switching to an amortized posterior for this comparison corrects the boundary-mass component of the miscalibration, reproducibly at two independent replicate counts, though a smaller residual deviation in the shape of the non-boundary distribution remains and is not yet explained. We attribute the free posterior’s miscalibration to an effective-degrees-of-freedom mismatch: the free posterior grants the more-complex model in a nested comparison one additional free variational parameter pair <em>per subject</em>, far exceeding the single population-level parameter nominally being tested, which classical asymptotic theory (including the correct boundary-mixture reference) does not account for; an amortized posterior’s shared encoder does not introduce this per-subject asymmetry.</p>
+<p>Likelihood-ratio tests built on the free posterior’s recovered marginal likelihood were miscalibrated against the correct Self-Liang boundary mixture reference for testing whether a random effect’s variance is zero (<a href="#fig-deltaofv-calibration" class="quarto-xref">Figure&nbsp;6</a>). Under the free posterior, only 25% of 100 null replicates fell within the prespecified boundary region, compared with the approximately 50% expected under the theoretical mixture; 22 replicates produced negative <span class="math inline">\(\Delta\mathrm{OFV}\)</span> values. Among the strictly positive replicates, the distribution also deviated from <span class="math inline">\(\chi^2_1\)</span> (Kolmogorov-Smirnov <span class="math inline">\(D=0.2922\)</span>, <span class="math inline">\(p&lt;0.0001\)</span>), although the empirical type-I error using the correct boundary-mixture cutoff was 6%, close to the nominal 5% level. The complete numerical calibration summary is provided in <a href="#supptbl-deltaofv-calibration" class="quarto-xref">Table S8</a>.</p>
+<p>This miscalibration was not explained by insufficient post-hoc importance-sampling precision: increasing the post-hoc evaluation sample size fivefold left the calibration essentially unchanged, including a highly discrepant replicate whose <span class="math inline">\(\Delta\mathrm{OFV}\)</span> value remained nearly unchanged. Switching to an amortized posterior substantially improved the boundary-mass component of the calibration, reproducibly at two independent replicate counts, although a smaller residual deviation in the shape of the non-boundary distribution remained. We attribute the free posterior’s miscalibration to an effective-degrees-of-freedom mismatch: the more-complex model receives an additional free variational parameter pair for every subject, far exceeding the single population-level variance parameter nominally being tested. Classical asymptotic theory, including the Self-Liang boundary-mixture reference, does not account for this per-subject asymmetry; a shared amortized encoder does not introduce the same increase in subject-specific variational parameters.</p>
 <div id="fig-deltaofv-calibration" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-deltaofv-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="publication/figures/fig_deltaofv_calibration.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-deltaofv-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;6: Empirical <span class="math inline">\(\Delta\mathrm{OFV}\)</span> distribution under the null hypothesis, free versus amortized posterior, against the theoretical Self-Liang mixture reference density.
+Figure&nbsp;6: Empirical <span class="math inline">\(\Delta\mathrm{OFV}\)</span> distribution under the null hypothesis against the theoretical Self-Liang mixture reference density.
 </figcaption>
 </figure>
 </div>
-<div id="tbl-deltaofv-calibration" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-tbl figure">
-<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-deltaofv-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;8: <span class="math inline">\(\Delta\mathrm{OFV}\)</span> calibration summary: boundary fraction, Kolmogorov-Smirnov statistic and p-value against <span class="math inline">\(\chi^2_1\)</span> for the strictly-positive replicates, and empirical type-I error of the correct boundary-mixture test.
-</figcaption>
-<div aria-describedby="tbl-deltaofv-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<colgroup>
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>condition</th>
-<th>n_reps</th>
-<th>boundary_fraction_pct</th>
-<th>n_negative_dofv</th>
-<th>ks_stat</th>
-<th>ks_p</th>
-<th>type1_error_correct_test_pct</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>free</td>
-<td>100</td>
-<td>25.0</td>
-<td>22</td>
-<td>0.2922</td>
-<td>0.0</td>
-<td>6.0</td>
-</tr>
-</tbody>
-</table>
-</div>
-</figure>
-</div>
-<p>This finding is scoped specifically to likelihood-ratio comparisons that change the number of random effects; it does not affect the <span class="math inline">\(\Omega\)</span>-bias correction findings reported above, which never depended on nested-model comparison.</p>
+<p>This finding is scoped specifically to likelihood-ratio comparisons that change the number of random effects; it does not affect the BSV-bias correction findings reported above, which never depended on nested-model comparison.</p>
 </section>
 <section id="comparison-to-established-estimation-methods-1" class="level3">
 <h3 class="anchored" data-anchor-id="comparison-to-established-estimation-methods-1">Comparison to Established Estimation Methods</h3>
-<p>On matched simulated data (<span class="math inline">\(N=120\)</span> subjects, 20 replicates), FOCEI, SAEM, and variational inference at <span class="math inline">\(K=64\)</span> recover both fixed effects and <span class="math inline">\(\Omega\)</span> with closely comparable accuracy, while <span class="math inline">\(K=1\)</span> reproduces the same systematic <span class="math inline">\(\Omega\)</span> underestimation established throughout the linear-tier results above (<a href="#tbl-baseline-comparison" class="quarto-xref">Table&nbsp;9</a>). Fixed-effect bias is small for every method (under 2.1% in magnitude across <span class="math inline">\(CL\)</span>, <span class="math inline">\(V\)</span>, and <span class="math inline">\(k_a\)</span> for FOCEI, SAEM, and both VI arms alike), consistent with the pattern established throughout this work that fixed effects are not affected by the plain-ELBO bias regardless of estimation method. For <span class="math inline">\(\Omega\)</span>, FOCEI and SAEM show bias no larger than 3.6% on any parameter (<span class="math inline">\(\Omega_{ka}\)</span>: <span class="math inline">\(-3.6\%\)</span> and <span class="math inline">\(-1.25\%\)</span> respectively); VI at <span class="math inline">\(K=64\)</span> matches this closely, with bias under 1.2% on every <span class="math inline">\(\Omega\)</span> parameter (<span class="math inline">\(\Omega_{CL}\)</span>: <span class="math inline">\(-0.30\%\)</span>, <span class="math inline">\(\Omega_V\)</span>: <span class="math inline">\(+1.15\%\)</span>, <span class="math inline">\(\Omega_{ka}\)</span>: <span class="math inline">\(-1.18\%\)</span>). VI at <span class="math inline">\(K=1\)</span>, by contrast, shows the characteristic pattern identified throughout this work: <span class="math inline">\(\Omega_V\)</span> and <span class="math inline">\(\Omega_{ka}\)</span> biased by <span class="math inline">\(-14.3\%\)</span> and <span class="math inline">\(-21.9\%\)</span> respectively, an order of magnitude larger than FOCEI, SAEM, or VI at <span class="math inline">\(K=64\)</span> on the same parameters. A parallel pattern holds for the residual-error parameter <span class="math inline">\(\sigma\)</span>: FOCEI, SAEM, and VI at <span class="math inline">\(K=64\)</span> all recover <span class="math inline">\(\sigma\)</span> within 2% of its true value, while VI at <span class="math inline">\(K=1\)</span> overestimates it by 7.4%.</p>
+<p>On matched simulated data (<span class="math inline">\(N=120\)</span> subjects, 20 replicates), FOCEI, SAEM, and variational inference at <span class="math inline">\(K=64\)</span> recover both fixed effects and the random-effect standard deviations with closely comparable accuracy, while <span class="math inline">\(K=1\)</span> reproduces the same systematic underestimation of the random-effect standard deviations established throughout the linear-tier results above (<a href="#tbl-baseline-comparison" class="quarto-xref">Table&nbsp;1</a>). Fixed-effect bias is small for every method (under 2.1% in magnitude across <span class="math inline">\(CL\)</span>, <span class="math inline">\(V\)</span>, and <span class="math inline">\(k_a\)</span> for FOCEI, SAEM, and both VI arms alike), showing that structural fixed effects were comparatively well recovered in this matched benchmark. For the random-effect standard deviations, FOCEI and SAEM show bias no larger than 3.6% on any parameter (<span class="math inline">\(\omega_{k_a}\)</span>: <span class="math inline">\(-3.6\%\)</span> and <span class="math inline">\(-1.25\%\)</span> respectively); VI at <span class="math inline">\(K=64\)</span> matches this closely, with bias under 1.2% on every <span class="math inline">\(\omega\)</span> parameter (<span class="math inline">\(\omega_{CL}\)</span>: <span class="math inline">\(-0.30\%\)</span>, <span class="math inline">\(\omega_V\)</span>: <span class="math inline">\(+1.15\%\)</span>, <span class="math inline">\(\omega_{k_a}\)</span>: <span class="math inline">\(-1.18\%\)</span>). VI at <span class="math inline">\(K=1\)</span>, by contrast, shows the characteristic pattern identified throughout this work: <span class="math inline">\(\omega_V\)</span> and <span class="math inline">\(\omega_{k_a}\)</span> biased by <span class="math inline">\(-14.3\%\)</span> and <span class="math inline">\(-21.9\%\)</span> respectively, an order of magnitude larger than FOCEI, SAEM, or VI at <span class="math inline">\(K=64\)</span> on the same parameters. A parallel pattern holds for the residual-error parameter <span class="math inline">\(\sigma\)</span>: FOCEI, SAEM, and VI at <span class="math inline">\(K=64\)</span> all recover <span class="math inline">\(\sigma\)</span> within 2% of its true value, while VI at <span class="math inline">\(K=1\)</span> overestimates it by 7.4%.</p>
 <div id="tbl-baseline-comparison" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-baseline-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;9: Mean parameter estimates by method (FOCEI, SAEM, variational inference at <span class="math inline">\(K=1\)</span> and <span class="math inline">\(K=64\)</span>) against ground truth, <span class="math inline">\(N=120\)</span> subjects, 20 replicates.
+Table&nbsp;1: Mean parameter estimates by method (FOCEI, SAEM, variational inference at <span class="math inline">\(K=1\)</span> and <span class="math inline">\(K=64\)</span>) against ground truth, <span class="math inline">\(N=120\)</span> subjects, 20 replicates.
 </figcaption>
 <div aria-describedby="tbl-baseline-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
@@ -1823,42 +350,42 @@ Table&nbsp;9: Mean parameter estimates by method (FOCEI, SAEM, variational infer
 </colgroup>
 <thead>
 <tr class="header">
-<th>method</th>
-<th>CL</th>
-<th>V</th>
-<th>ka</th>
-<th>om_CL</th>
-<th>om_V</th>
-<th>om_ka</th>
-<th>sigma</th>
-<th>cpu_secs_mean</th>
-<th>cpu_secs_median</th>
+<th>Method</th>
+<th><span class="math inline">\(CL\)</span></th>
+<th><span class="math inline">\(V\)</span></th>
+<th><span class="math inline">\(k_a\)</span></th>
+<th><span class="math inline">\(\omega_{CL}\)</span></th>
+<th><span class="math inline">\(\omega_V\)</span></th>
+<th><span class="math inline">\(\omega_{k_a}\)</span></th>
+<th><span class="math inline">\(\sigma\)</span></th>
+<th>Runtime mean (s)</th>
+<th>Runtime median (s)</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td>foce</td>
-<td>3.0031</td>
-<td>30.3044</td>
-<td>1.1845</td>
-<td>0.2961</td>
-<td>0.2034</td>
-<td>0.3856</td>
-<td>0.1962</td>
-<td>nan</td>
-<td>nan</td>
+<td>FOCEI</td>
+<td>3.0021</td>
+<td>30.2764</td>
+<td>1.1847</td>
+<td>0.2957</td>
+<td>0.2043</td>
+<td>0.3888</td>
+<td>0.196</td>
+<td>11.2512</td>
+<td>11.1275</td>
 </tr>
 <tr class="even">
-<td>saem</td>
-<td>2.9804</td>
-<td>30.0858</td>
-<td>1.1899</td>
+<td>SAEM</td>
+<td>2.9805</td>
+<td>30.0895</td>
+<td>1.1903</td>
 <td>0.2976</td>
 <td>0.2034</td>
-<td>0.395</td>
+<td>0.3951</td>
 <td>0.1963</td>
-<td>nan</td>
-<td>nan</td>
+<td>12.6836</td>
+<td>12.621</td>
 </tr>
 <tr class="odd">
 <td>vi_K1</td>
@@ -1869,8 +396,8 @@ Table&nbsp;9: Mean parameter estimates by method (FOCEI, SAEM, variational infer
 <td>0.1715</td>
 <td>0.3126</td>
 <td>0.2148</td>
-<td>4.9956</td>
-<td>4.8898</td>
+<td>5.14</td>
+<td>4.9404</td>
 </tr>
 <tr class="even">
 <td>vi_K64</td>
@@ -1881,44 +408,53 @@ Table&nbsp;9: Mean parameter estimates by method (FOCEI, SAEM, variational infer
 <td>0.2023</td>
 <td>0.3953</td>
 <td>0.1965</td>
-<td>15.8076</td>
-<td>17.0114</td>
+<td>16.4972</td>
+<td>17.6549</td>
 </tr>
 <tr class="odd">
-<td>TRUTH</td>
-<td>3.0</td>
-<td>30.0</td>
+<td>Truth</td>
+<td>3</td>
+<td>30</td>
 <td>1.2</td>
 <td>0.3</td>
 <td>0.2</td>
 <td>0.4</td>
 <td>0.2</td>
-<td>nan</td>
-<td>nan</td>
+<td></td>
+<td></td>
 </tr>
 </tbody>
 </table>
 </div>
 </figure>
 </div>
-<p>Runtime is not compared in this section because process CPU time was not captured consistently for the FOCEI and SAEM fits in the current baseline pipeline. Consequently, the baseline comparison reported here is restricted to parameter-recovery accuracy.</p>
+<p>Mean process CPU time, both sides now evaluating the model via a closed-form analytic solution, was 11.25s for FOCEI, 12.68s for SAEM, 5.14s for VI at <span class="math inline">\(K=1\)</span>, and 16.50s for VI at <span class="math inline">\(K=64\)</span>. At <span class="math inline">\(K=1\)</span>, variational inference is modestly faster than both established methods (2.2x versus FOCEI, 2.5x versus SAEM). At <span class="math inline">\(K=64\)</span>, this reverses: VI is slower than both (FOCEI is roughly 1.5x faster, SAEM roughly 1.3x faster), reflecting the direct computational cost of the importance-weighting correction itself. This asymmetry is precisely the point made in the Methods scoping paragraph above: on this simple, analytically tractable model, correcting the <span class="math inline">\(K=1\)</span> bias to FOCEI/SAEM-comparable accuracy is not free, and the net runtime effect depends on <span class="math inline">\(K\)</span>, not a uniform variational-inference advantage. This result should not be read as evidence against variational inference’s practical value, which this work’s broader case rests on accuracy (see above) together with runtime advantages already established in the literature for larger, structurally more complex models (<span class="citation" data-cites="arruda2024amortized">Arruda et al. (<a href="#ref-arruda2024amortized" role="doc-biblioref">2024</a>)</span>); it is evidence that, for models simple enough to admit a closed-form solution, the runtime case for variational inference is genuinely mixed rather than uniformly favorable. Thread counts were not explicitly pinned to be equal between the PyTorch and R/BLAS processes; see Limitations.</p>
 </section>
 </section>
 <section id="discussion" class="level2">
 <h2 class="anchored" data-anchor-id="discussion">Discussion</h2>
-<p>Across simulated and real data, and across a linear analytically tractable model and a genuinely nonlinear model requiring numerical integration, we find a consistent picture: plain-ELBO (<span class="math inline">\(K=1\)</span>) variational inference systematically underestimates between-subject variance components, this bias is substantially correctable by importance-weighting the training objective (<span class="math inline">\(K&gt;1\)</span>) or by using a richer variational family (normalizing flows), and the correction reproduces on real pharmacokinetic data with external validation against an independently published fit. Directly against independent FOCEI and SAEM baseline fits on matched simulated data, corrected variational inference matches both established methods’ accuracy closely, while uncorrected <span class="math inline">\(K=1\)</span> shows bias an order of magnitude larger on the most affected parameters. This indicates that the correction identified in this work is not merely an internal, self-referential improvement within variational inference, but brings VI to a level of accuracy quantitatively comparable to the methods it is proposed to replace. This supports the practical use of corrected variational inference as a faster alternative to FOCEI/SAEM for NLME model fitting, with two important caveats developed below: not every posterior architecture is safe to use for every purpose, and the correction of point estimates does not automatically extend to every downstream use of a fitted model.</p>
-<p><strong>Practical guidance.</strong> Three specific combinations identified in this work should be avoided in practice rather than used as encountered. First, amortized posteriors combined with normalizing flows are unstable at every tested <span class="math inline">\(K\)</span> on the linear model and should not be used; free-posterior flows or amortized-posterior Gaussian families do not show this instability and are the recommended alternatives depending on whether reuse across datasets (amortization) or maximal bias correction at low <span class="math inline">\(K\)</span> (flow) is the priority. Second, amortized posteriors on the nonlinear Michaelis-Menten model showed a distinct, substantial instability not observed on the linear model; free posteriors are recommended for nonlinear structural models pending further investigation of this failure mode. Third, likelihood-ratio tests comparing models that differ in random-effect structure should use an amortized rather than free posterior, given the effective-degrees-of- freedom mismatch identified above; free-posterior fixed-effect and <span class="math inline">\(\Omega\)</span> point estimates themselves remain valid, only their use for nested-model hypothesis testing is affected.</p>
-<p><strong>Michaelis-Menten identifiability.</strong> The restriction of between-subject variability to <span class="math inline">\(V_{max}\)</span> alone (with <span class="math inline">\(K_m\)</span> as a fixed effect) in the nonlinear tier is not a limitation specific to this work’s variational approach: correlation between <span class="math inline">\(V_{max}\)</span> and <span class="math inline">\(K_m\)</span> in saturable elimination models is a recognized cross-method identifiability difficulty, and a model specification allowing independent variability on both parameters simultaneously would be equally problematic for FOCEI or SAEM. The consistency of this project’s own empirical findings with that established understanding supports this interpretation: <span class="math inline">\(\Omega_{K_m}\)</span>’s bias remained severe and stable across substantially different training durations and sampling designs in exploratory analyses, in a pattern distinct from the small-sample bias discussed below. A direct comparison against FOCEI/SAEM on the same restricted model specification would strengthen it further. The FOCEI/SAEM baseline comparison reported above uses the linear tier only and does not yet extend to the nonlinear (Michaelis-Menten) model.</p>
-<p><strong>Small-sample bias.</strong> Some residual <span class="math inline">\(\Omega\)</span> bias remaining at high <span class="math inline">\(K\)</span> on the smallest real dataset (theophylline, <span class="math inline">\(N=12\)</span>) is substantially, if not completely, explained by classical small-sample maximum-likelihood bias in variance-component estimation, the same phenomenon that motivates REML-type corrections in linear mixed models, rather than a failure of the importance-weighting correction: the residual bias shrinks systematically as sample size increases, holding <span class="math inline">\(K\)</span> fixed, in supplementary analyses using both the real theophylline data at varying subsample sizes and the Michaelis-Menten simulation tier’s own <span class="math inline">\(\Omega_V\)</span> estimates.</p>
-<p><strong>The amortized+flow and amortized-nonlinear instabilities as open problems.</strong> The amortized+flow instability is plausibly explained by the amortized encoder’s output serving a double role, both defining the flow’s base distribution and its conditioning input, under this specific configuration. Notably, <span class="citation" data-cites="arruda2024amortized">Arruda et al. (<a href="#ref-arruda2024amortized" role="doc-biblioref">2024</a>)</span>’s independent amortized-flow architecture for NLME models does not share this coupling: their conditional normalizing flow’s base distribution is a fixed standard normal, with the amortized encoder’s (LSTM-based) summary statistics used solely as the flow’s conditioning input, never as the base distribution’s own parameters. A preliminary, architecturally decoupled variant following this design was implemented and smoke-tested in the course of this work, producing plausible (non-divergent) parameter estimates on a small-scale test, but has not been validated at the scale needed to report as a result; we flag it as a concrete, motivated direction for resolving this instability rather than treating it as an unexplained dead end. The amortized-nonlinear-model instability observed independently on the Michaelis-Menten tier does not involve a flow at all and is therefore a distinct problem; we speculate that it may reflect the greater difficulty of learning one shared encoder mapping across subjects whose trajectory shapes vary substantially more (spanning saturated, transitional, and first-order elimination regimes) than the comparatively uniform trajectory shapes of the linear tier, but this is not yet tested.</p>
-<p><strong>Limitations.</strong> The accuracy side of the FOCEI/SAEM comparison (see Results) is now complete and directly supports this work’s central claim on the linear tier. Two gaps remain. First, the runtime side of that comparison is not reported because process CPU time was not correctly captured for the FOCEI and SAEM fits in the current baseline pipeline. As a result, the practical speed question motivating this work cannot yet be answered quantitatively for this model, except by comparison to the general literature’s reported comparisons for other models, such as the roughly two-orders-of-magnitude speedup reported by <span class="citation" data-cites="arruda2024amortized">Arruda et al. (<a href="#ref-arruda2024amortized" role="doc-biblioref">2024</a>)</span>. Second, the baseline comparison currently covers only the linear tier; extending it to the Michaelis-Menten nonlinear tier would substantiate the identifiability claim made above with a direct comparison rather than an appeal to general pharmacometric practice. Beyond the baseline comparison, this work tests a single linear structural model class and a single nonlinear structural model class; whether the identified biases and corrections generalize to structurally more complex models (multiple compartments, covariate effects, time-varying dosing) is not directly tested here. The residual, smaller miscalibration remaining in the amortized-posterior likelihood-ratio test calibration after the boundary-mass correction (see Results) also remains unexplained; a follow-up analysis testing whether divergence in the two nested models’ residual-error estimates explains this residual found a real correlation but could not establish it as a mechanism independent of the already-understood boundary-mass effect, given that the residual-error parameter appears directly inside the likelihood by construction.</p>
-<p><strong>Future work.</strong> Beyond correcting the runtime measurement in the FOCEI/SAEM baseline comparison and extending it to the nonlinear tier, concrete directions include: validating the decoupled-base-distribution flow architecture described above at production scale; extending the nonlinear tier to structurally harder models such as target-mediated drug disposition; and, given that the nonlinear tier’s numerical integration is the dominant computational cost identified in this work, evaluating whether purpose-built ODE solvers such as <code>DifferentialEquations.jl</code> <span class="citation" data-cites="rackauckas2017differentialequations">(<a href="#ref-rackauckas2017differentialequations" role="doc-biblioref">Rackauckas and Nie 2017</a>)</span>, already used by <span class="citation" data-cites="arruda2024amortized">Arruda et al. (<a href="#ref-arruda2024amortized" role="doc-biblioref">2024</a>)</span> for their more structurally complex model, would meaningfully reduce this cost without requiring changes to the variational inference machinery itself.</p>
+<p>Across simulated and real data, we observed a consistent dependence of between-subject variability estimates on the tightness of the variational objective. Under the standard ELBO (<span class="math inline">\(K=1\)</span>), random-effect variability was systematically underestimated, whereas larger <span class="math inline">\(K\)</span> under the IW-ELBO substantially reduced this bias. The same pattern was observed in both free and amortized posterior architectures, across dense and sparse sampling designs, and in a nonlinear model requiring numerical integration. Direct comparison on matched simulated datasets further showed that VI at <span class="math inline">\(K=64\)</span> recovered fixed effects and between-subject variability with accuracy comparable to FOCEI and SAEM. Thus, the improvement at larger <span class="math inline">\(K\)</span> is not merely an internal change within VI; it brings the resulting point estimates close to those from established NLME estimators under the conditions studied here.</p>
+<p>The companion fixed-effect analyses clarify the specificity of this result. Structural fixed effects were generally much less sensitive to <span class="math inline">\(K\)</span> than the random-effect parameters. In Phase 0, <span class="math inline">\(k_a\)</span> remained consistently underestimated across all tested values of <span class="math inline">\(K\)</span>, suggesting a persistent estimation or information limitation distinct from the <span class="math inline">\(K\)</span>-dependent variability bias. Residual-error estimates were more sensitive to <span class="math inline">\(K\)</span> in some settings and tended to improve as between-subject variability increased toward its generating value. This pattern is consistent with partial compensation between residual and between-subject variability: when random-effect variability is underestimated, some unexplained variation can be absorbed by the residual-error term. The principal effect of increasing <span class="math inline">\(K\)</span> is therefore better described as improved allocation and recovery of variability rather than a general correction of all parameter bias.</p>
+<p>The results also show that posterior architecture and variational family cannot be treated as interchangeable implementation details. Free-posterior normalizing flows substantially reduce variability bias even at low <span class="math inline">\(K\)</span> in well-identified designs. In contrast, the amortized-flow configuration tested here was unstable across all values of <span class="math inline">\(K\)</span>. A plausible explanation is that the amortized encoder output serves two roles simultaneously in this architecture: it parameterizes the flow’s base distribution and also conditions the flow transformation, creating a moving optimization target. The amortized-flow architecture of <span class="citation" data-cites="arruda2024amortized">Arruda et al. (<a href="#ref-arruda2024amortized" role="doc-biblioref">2024</a>)</span> avoids this coupling by using a fixed standard-normal base distribution and reserving encoder-derived summaries for conditioning. A preliminary decoupled implementation following that design produced plausible estimates in a small-scale test, but it has not yet been evaluated at the scale required for inclusion as a formal result.</p>
+<p>A distinct instability was observed when the amortized Gaussian posterior was applied to the nonlinear Michaelis-Menten model. Because no flow was involved, this behavior cannot be explained by the same base-distribution coupling. One possibility is that a single shared encoder is more difficult to train when subject trajectories span qualitatively different dynamical regimes, including saturated, transitional, and approximately first-order elimination. This interpretation remains speculative and requires dedicated investigation.</p>
+<p>The nonlinear analysis also highlighted an identifiability issue that should be distinguished from VI-specific approximation error. Allowing independent between-subject variability on both <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(K_m\)</span> produced severe and persistent bias in the variability associated with <span class="math inline">\(K_m\)</span>, even after extending training and redesigning the sampling window. Restricting between-subject variability to <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(V\)</span>, while retaining <span class="math inline">\(K_m\)</span> as a fixed effect, resolved the most severe instability. This behavior is consistent with the known correlation and identifiability challenges associated with simultaneous estimation of Michaelis-Menten parameters in saturable systems. A direct FOCEI/SAEM comparison on the same nonlinear model would provide a stronger cross-method confirmation of this interpretation.</p>
+<p>The likelihood-ratio calibration experiments show that accurate point estimates do not guarantee valid downstream likelihood-based inference. When nested models differed in random-effect structure, the free posterior produced substantially too little boundary mass relative to the Self-Liang reference distribution. Increasing the precision of the post-hoc importance-sampling evaluation did not resolve the discrepancy, arguing against finite-sample importance-sampling noise as the primary explanation. In contrast, the amortized posterior substantially restored the expected boundary behavior. The effective-degrees-of-freedom interpretation provides a plausible explanation: adding a random effect under a free posterior introduces additional subject-specific variational parameters for every subject, whereas the classical likelihood-ratio reference accounts only for the population-level parameter being tested. The shared amortized encoder does not introduce the same per-subject asymmetry. A smaller residual deviation in the positive part of the null distribution remains unexplained.</p>
+<p>The real-data analyses provide an important complement to the simulations. Both theophylline and warfarin showed smaller random-effect variability estimates at <span class="math inline">\(K=1\)</span> than at <span class="math inline">\(K=64\)</span> on the same data, reproducing the direction of the simulation result without access to ground truth. On warfarin, clearance and volume estimates were also compatible with published FOCEI confidence intervals despite differences in structural absorption models. These findings support the relevance of the simulation-derived pattern to practical pharmacokinetic analyses, while the small size of the theophylline dataset also emphasizes that residual high-<span class="math inline">\(K\)</span> variability bias may reflect classical small-sample estimation effects in addition to variational approximation error.</p>
+<p>The direct runtime comparison should be interpreted narrowly. On the simple analytic one-compartment model used for the benchmark, VI at <span class="math inline">\(K=1\)</span> was faster than FOCEI and SAEM, whereas VI at <span class="math inline">\(K=64\)</span> was slower because of the direct computational cost of importance weighting. This result does not support a uniform speed advantage for corrected VI on simple models. Rather, it shows that improved accuracy at larger <span class="math inline">\(K\)</span> carries a measurable computational cost. Potential efficiency advantages are more likely to emerge for larger populations, repeated inference, amortized workflows, or structurally complex models, consistent with prior work <span class="citation" data-cites="arruda2024amortized">(<a href="#ref-arruda2024amortized" role="doc-biblioref">Arruda et al. 2024</a>)</span>.</p>
+<section id="limitations-and-future-directions" class="level3">
+<h3 class="anchored" data-anchor-id="limitations-and-future-directions">Limitations and Future Directions</h3>
+<p>Several limitations should be considered. First, thread counts were not explicitly matched between PyTorch and R/BLAS processes in the runtime benchmark, so differences in incidental parallelism may contribute to the observed timing differences. Second, the FOCEI/SAEM comparison was performed only for the linear model. Extending the benchmark to the Michaelis-Menten model would strengthen the interpretation of the nonlinear identifiability results. Third, this study evaluates one linear and one nonlinear structural model; generalization to multicomponent models, correlated random effects, covariate models, time-varying dosing, and other residual-error structures remains to be established. Fourth, the smaller residual miscalibration in the positive component of the amortized-posterior likelihood-ratio test remains unexplained.</p>
+<p>Future work should therefore focus on production-scale evaluation of the decoupled amortized-flow architecture, direct FOCEI/SAEM benchmarking on nonlinear models, explicit control of computational parallelism in runtime comparisons, and extension to more complex NLME structures. Because numerical integration dominated the cost of the nonlinear experiments, evaluating differentiable, purpose-built ODE solvers such as <code>DifferentialEquations.jl</code> <span class="citation" data-cites="rackauckas2017differentialequations">(<a href="#ref-rackauckas2017differentialequations" role="doc-biblioref">Rackauckas and Nie 2017</a>)</span>, as used by <span class="citation" data-cites="arruda2024amortized">Arruda et al. (<a href="#ref-arruda2024amortized" role="doc-biblioref">2024</a>)</span> for more structurally complex models, may also be worthwhile provided that solver changes do not alter the statistical comparison being made.</p>
+</section>
 </section>
 <section id="references" class="level2">
 <h2 class="anchored" data-anchor-id="references">References</h2>
 <div id="refs" class="references csl-bib-body hanging-indent" data-entry-spacing="0" role="list">
 <div id="ref-arruda2024amortized" class="csl-entry" role="listitem">
 Arruda, Jonas, Yannik Schälte, Clemens Peiter, Olga Teplytska, Ulrich Jaehde, and Jan Hasenauer. 2024. <span>“An Amortized Approach to Non-Linear Mixed-Effects Modeling Based on Neural Posterior Estimation.”</span> In <em>Proceedings of the 41st International Conference on Machine Learning</em>. Vol. 235. Proceedings of Machine Learning Research. Vienna, Austria: PMLR.
+</div>
+<div id="ref-baaz2026empirical" class="csl-entry" role="listitem">
+Baaz, Marcus, Anders Sjöberg, and Mats Jirstrand. 2026. <span>“The Empirical <span>Bayes</span> Variational Autoencoder: A Neural <span>ODE</span> Approach for Population Modeling in Pharmacology.”</span> <em>CPT: Pharmacometrics &amp; Systems Pharmacology</em> 15 (7): e70280. <a href="https://doi.org/10.1002/psp4.70280">https://doi.org/10.1002/psp4.70280</a>.
 </div>
 <div id="ref-beal1980nonmem" class="csl-entry" role="listitem">
 Beal, Stuart, and Lewis Sheiner. 1980. <span>“The <span>NONMEM</span> System.”</span> <em>The American Statistician</em> 34 (2): 118–19.
@@ -1935,6 +471,9 @@ Fidler, Matthew, Justin J. Wilkins, Rik Hooijmaijers, Teun M. Post, Rik Schoemak
 <div id="ref-kuhn2005maximum" class="csl-entry" role="listitem">
 Kuhn, Estelle, and Marc Lavielle. 2005. <span>“Maximum Likelihood Estimation in Nonlinear Mixed Effects Models.”</span> <em>Computational Statistics &amp; Data Analysis</em> 49 (4): 1020–38.
 </div>
+<div id="ref-li2026variational" class="csl-entry" role="listitem">
+Li, Zhe, Mélanie Prague, Rodolphe Thiébaut, and Quentin Clairon. 2026. <span>“Variational Autoencoder for Inference of Nonlinear Mixed Effect Models Based on Ordinary Differential Equations.”</span> <em>arXiv Preprint arXiv:2601.17400</em>.
+</div>
 <div id="ref-oreilly1968studies" class="csl-entry" role="listitem">
 O’Reilly, Robert A., and Paul M. Aggeler. 1968. <span>“Studies on Coumarin Anticoagulant Drugs: Initiation of Warfarin Therapy Without a Loading Dose.”</span> <em>Circulation</em> 38 (1): 169–77.
 </div>
@@ -1948,7 +487,7 @@ Paszke, Adam, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Ch
 Pinheiro, José C. 1994. <span>“Topics in Mixed Effects Models.”</span> PhD thesis, Madison, USA: University of Wisconsin, Madison.
 </div>
 <div id="ref-rackauckas2017differentialequations" class="csl-entry" role="listitem">
-Rackauckas, Christopher, and Qing Nie. 2017. <span>“<span class="nocase">DifferentialEquations.jl</span> – a Performant and Feature-Rich Ecosystem for Solving Differential Equations in <span>Julia</span>.”</span> <em>Journal of Open Research Software</em> 5 (1).
+Rackauckas, Christopher, and Qing Nie. 2017. <span>“<span class="nocase">DifferentialEquations.jl</span>: A Performant and Feature-Rich Ecosystem for Solving Differential Equations in <span>Julia</span>.”</span> <em>Journal of Open Research Software</em> 5 (1).
 </div>
 <div id="ref-rezende2015variational" class="csl-entry" role="listitem">
 Rezende, Danilo, and Shakir Mohamed. 2015. <span>“Variational Inference with Normalizing Flows.”</span> In <em>International Conference on Machine Learning</em>, 1530–38. PMLR.
@@ -1956,10 +495,2226 @@ Rezende, Danilo, and Shakir Mohamed. 2015. <span>“Variational Inference with N
 <div id="ref-self1987asymptotic" class="csl-entry" role="listitem">
 Self, Steven G., and Kung-Yee Liang. 1987. <span>“Asymptotic Properties of Maximum Likelihood Estimators and Likelihood Ratio Tests Under Nonstandard Conditions.”</span> <em>Journal of the American Statistical Association</em> 82 (398): 605–10.
 </div>
+<div id="ref-tarek2026fitting" class="csl-entry" role="listitem">
+Tarek, Mohamed, and Pedro Afonso. 2026. <span>“Fitting Large Nonlinear Mixed Effects Models Using Variational Expectation Maximization.”</span> <em>arXiv Preprint arXiv:2604.26160</em>.
+</div>
 <div id="ref-wang2008derivation" class="csl-entry" role="listitem">
 Wang, Yaning. 2008. <span>“Derivation of Various <span>NONMEM</span> Estimation Methods.”</span> <em>Journal of Pharmacokinetics and Pharmacodynamics</em> 35 (2): 249–49.
 </div>
 </div>
+</section>
+<section id="supplementary-material" class="level2">
+<h2 class="anchored" data-anchor-id="supplementary-material">Supplementary Material</h2>
+<section id="supplementary-figures" class="level3">
+<h3 class="anchored" data-anchor-id="supplementary-figures">Supplementary Figures</h3>
+<div id="suppfig-phase0-fixed-effects" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-suppfig figure">
+<div aria-describedby="suppfig-phase0-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="publication/figures/fig_phase0_fixed_effects.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-suppfig" id="suppfig-phase0-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure S1: Structural fixed-effect and residual-error bias by <span class="math inline">\(K\)</span>, shown separately for free and amortized posteriors in the Phase 0 Gaussian analysis. The dashed line marks zero bias; error bars show the standard error across replicates.
+</figcaption>
+</figure>
+</div>
+<div id="suppfig-phase1-fixed-effects" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-suppfig figure">
+<div aria-describedby="suppfig-phase1-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="publication/figures/fig_phase1_grid_fixed_effects.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-suppfig" id="suppfig-phase1-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure S2: Structural fixed-effect and residual-error bias by <span class="math inline">\(K\)</span> across the Phase 1 dense/sparse sampling designs and variational families. The figure complements the primary random-effect SD analysis by showing parameter-specific sensitivity to <span class="math inline">\(K\)</span>.
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="supplementary-tables" class="level3">
+<h3 class="anchored" data-anchor-id="supplementary-tables">Supplementary Tables</h3>
+<div id="supptbl-phase0-headline" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-supptbl figure">
+<div aria-describedby="supptbl-phase0-headline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Posterior</th>
+<th><span class="math inline">\(K\)</span></th>
+<th>Parameter</th>
+<th>Mean bias (%)</th>
+<th>SD bias (%)</th>
+<th>n</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>amortized</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.71</td>
+<td>5.91</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-47.83</td>
+<td>39.58</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-13.45</td>
+<td>35.79</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>0.17</td>
+<td>7.51</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-16.5</td>
+<td>14.09</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-5.79</td>
+<td>16.88</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.33</td>
+<td>7.05</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-9.67</td>
+<td>13.43</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-2.61</td>
+<td>13.74</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-1.67</td>
+<td>6.34</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-47.43</td>
+<td>42.03</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-8.91</td>
+<td>33.74</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>0.25</td>
+<td>7.49</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-16.38</td>
+<td>13.58</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-6.75</td>
+<td>16.45</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>0.42</td>
+<td>7.43</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-9</td>
+<td>12.25</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-2.03</td>
+<td>12.11</td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase0-headline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S1: Mean relative bias (%) in random-effect standard deviations (<span class="math inline">\(\omega\)</span>) by posterior architecture and <span class="math inline">\(K\)</span>.
+</figcaption>
+</figure>
+</div>
+<div id="supptbl-phase0-fixed-effects" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-supptbl figure">
+<div aria-describedby="supptbl-phase0-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Posterior</th>
+<th><span class="math inline">\(K\)</span></th>
+<th>Parameter</th>
+<th>Mean bias (%)</th>
+<th>SD bias (%)</th>
+<th>n</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>amortized</td>
+<td>1</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.48</td>
+<td>2.85</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.05</td>
+<td>3.32</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>1</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-3.94</td>
+<td>4.48</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>15.34</td>
+<td>6.29</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>8</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.04</td>
+<td>4.16</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.41</td>
+<td>2.99</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>8</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-4.07</td>
+<td>3.17</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.31</td>
+<td>2.85</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>64</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.32</td>
+<td>3.49</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.24</td>
+<td>2.89</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>64</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-2.92</td>
+<td>3.89</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>-1.21</td>
+<td>3.72</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>1</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.52</td>
+<td>3.45</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.51</td>
+<td>3.69</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>1</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-4.03</td>
+<td>5.3</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>9.92</td>
+<td>3.71</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>8</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>1.28</td>
+<td>4.49</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.25</td>
+<td>2.66</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>8</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-3.2</td>
+<td>3.43</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>-0.1</td>
+<td>3.46</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>64</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.2</td>
+<td>3.44</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.27</td>
+<td>2.71</td>
+<td>8</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>64</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-3.13</td>
+<td>3.15</td>
+<td>8</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>-1.15</td>
+<td>3.49</td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase0-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S2: Mean relative bias (%) in structural fixed effects and residual error by posterior architecture and <span class="math inline">\(K\)</span>. This companion table distinguishes persistent or residual-error bias from the strongly <span class="math inline">\(K\)</span>-dependent bias in between-subject variability.
+</figcaption>
+</figure>
+</div>
+<div id="supptbl-phase1-q2q4" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-supptbl figure">
+<div aria-describedby="supptbl-phase1-q2q4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Sampling design</th>
+<th>Posterior</th>
+<th>Variational family</th>
+<th><span class="math inline">\(K\)</span></th>
+<th>Parameter</th>
+<th>Mean bias (%)</th>
+<th>SD bias (%)</th>
+<th>n</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-2.14</td>
+<td>7.93</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-25.58</td>
+<td>29.33</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-17.35</td>
+<td>21.74</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.3</td>
+<td>6.76</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-6</td>
+<td>12.07</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-6.11</td>
+<td>9.63</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.1</td>
+<td>7.11</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-1.86</td>
+<td>10.43</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-2</td>
+<td>8.26</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.08</td>
+<td>7.15</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-1.02</td>
+<td>10.11</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-3</td>
+<td>8.77</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.07</td>
+<td>7.35</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-1.21</td>
+<td>10.32</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-1.52</td>
+<td>8.44</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>0.16</td>
+<td>6.99</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-0.58</td>
+<td>10.55</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-0.79</td>
+<td>8.27</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-1.04</td>
+<td>7.19</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-19.58</td>
+<td>23.19</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-16.94</td>
+<td>17.98</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>0.02</td>
+<td>7.07</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-5.67</td>
+<td>11.98</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-5.4</td>
+<td>9.62</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>0</td>
+<td>7.22</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-1.73</td>
+<td>11.07</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-0.96</td>
+<td>8.06</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-1.19</td>
+<td>8.63</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-81.85</td>
+<td>12.81</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-14.82</td>
+<td>26.86</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-2.1</td>
+<td>8.15</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-17.92</td>
+<td>24.74</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-25.12</td>
+<td>33.03</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-1.1</td>
+<td>7.57</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-2.83</td>
+<td>12.41</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-5.57</td>
+<td>21.98</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-1.16</td>
+<td>7.51</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-0.93</td>
+<td>11.02</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-19.27</td>
+<td>19.96</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.9</td>
+<td>7.54</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-1.7</td>
+<td>12.03</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-18.06</td>
+<td>26.08</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.67</td>
+<td>7.63</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-0.02</td>
+<td>10.54</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-5.21</td>
+<td>20.92</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>0.23</td>
+<td>7.83</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-83.05</td>
+<td>15.61</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-5.38</td>
+<td>26.65</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-1.71</td>
+<td>8.32</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-17.43</td>
+<td>26.43</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-24.26</td>
+<td>33.21</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-0.42</td>
+<td>7.39</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-2.65</td>
+<td>11.17</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>-5.12</td>
+<td>21.34</td>
+<td>30</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase1-q2q4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S3: Mean relative bias (%) in random-effect standard deviations (<span class="math inline">\(\omega\)</span>) by sampling design, posterior architecture, variational family, and <span class="math inline">\(K\)</span>.
+</figcaption>
+</figure>
+</div>
+<div id="supptbl-phase1-q2q4-fixed-effects" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-supptbl figure">
+<div aria-describedby="supptbl-phase1-q2q4-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 12%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Sampling design</th>
+<th>Posterior</th>
+<th>Variational family</th>
+<th><span class="math inline">\(K\)</span></th>
+<th>Parameter</th>
+<th>Mean bias (%)</th>
+<th>SD bias (%)</th>
+<th>n</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.17</td>
+<td>2.81</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.76</td>
+<td>2.15</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>1.34</td>
+<td>4.65</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>14.93</td>
+<td>8.2</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.24</td>
+<td>2.52</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.04</td>
+<td>2.32</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.34</td>
+<td>4.44</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.79</td>
+<td>3.8</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.27</td>
+<td>2.55</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.11</td>
+<td>2.24</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.86</td>
+<td>4.28</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>-0.32</td>
+<td>3.81</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.54</td>
+<td>3.04</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.31</td>
+<td>2.27</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.15</td>
+<td>4.16</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.96</td>
+<td>3.31</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.09</td>
+<td>2.44</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.02</td>
+<td>2.28</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.1</td>
+<td>4.06</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.11</td>
+<td>4.09</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.52</td>
+<td>2.48</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.2</td>
+<td>2.5</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.9</td>
+<td>4.39</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>-0.28</td>
+<td>3.8</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.13</td>
+<td>2.86</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.82</td>
+<td>2.28</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>1.3</td>
+<td>4.63</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>8.73</td>
+<td>4.37</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.02</td>
+<td>3.03</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.14</td>
+<td>2.35</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.06</td>
+<td>4.59</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.39</td>
+<td>3.83</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.33</td>
+<td>2.9</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.21</td>
+<td>2.62</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.24</td>
+<td>4.65</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>-0.68</td>
+<td>3.64</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>1.37</td>
+<td>3.2</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.69</td>
+<td>3.07</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-2.64</td>
+<td>6.22</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>38.12</td>
+<td>9.86</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.36</td>
+<td>3.16</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.08</td>
+<td>3.19</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-0.92</td>
+<td>6.22</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>12.41</td>
+<td>9.11</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.15</td>
+<td>3.07</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.13</td>
+<td>3.29</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.47</td>
+<td>6.57</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>amortized</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>1.49</td>
+<td>9.08</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.16</td>
+<td>2.76</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.24</td>
+<td>3.06</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-0.44</td>
+<td>5.85</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>6.58</td>
+<td>8.71</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.1</td>
+<td>2.49</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.29</td>
+<td>2.88</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.18</td>
+<td>6.36</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>5.06</td>
+<td>8.67</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.1</td>
+<td>2.68</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.04</td>
+<td>3.11</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.68</td>
+<td>6.39</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>flow</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>1.45</td>
+<td>8.57</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.88</td>
+<td>2.68</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-1.02</td>
+<td>3.03</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-2.75</td>
+<td>6.18</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>33.35</td>
+<td>9.43</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.73</td>
+<td>2.72</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.17</td>
+<td>3.37</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-0.72</td>
+<td>6.39</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>11.08</td>
+<td>9.61</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.16</td>
+<td>2.84</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.04</td>
+<td>3.16</td>
+<td>30</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.8</td>
+<td>6.44</td>
+<td>30</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>1.02</td>
+<td>9</td>
+<td>30</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase1-q2q4-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S4: Mean relative bias (%) in structural fixed effects and residual error using the same grouping as the primary Phase 1 analysis.
+</figcaption>
+</figure>
+</div>
+<div id="supptbl-phase1-q3-nonlinear" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-supptbl figure">
+<div aria-describedby="supptbl-phase1-q3-nonlinear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 11%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Posterior</th>
+<th>Variational family</th>
+<th><span class="math inline">\(K\)</span></th>
+<th>Parameter</th>
+<th>Mean estimate</th>
+<th>Truth</th>
+<th>Mean bias (%)</th>
+<th>n</th>
+<th>Fraction converged</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(K_m\)</span></td>
+<td>1.96</td>
+<td>2</td>
+<td>-1.984</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>30.145</td>
+<td>30</td>
+<td>0.483</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(V_{\max}\)</span></td>
+<td>8.011</td>
+<td>8</td>
+<td>0.134</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>0.192</td>
+<td>0.2</td>
+<td>-3.929</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\omega_{V_{\max}}\)</span></td>
+<td>0.301</td>
+<td>0.3</td>
+<td>0.352</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>1</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.201</td>
+<td>0.2</td>
+<td>0.719</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(K_m\)</span></td>
+<td>1.976</td>
+<td>2</td>
+<td>-1.196</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>30.113</td>
+<td>30</td>
+<td>0.376</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(V_{\max}\)</span></td>
+<td>7.898</td>
+<td>8</td>
+<td>-1.279</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>0.198</td>
+<td>0.2</td>
+<td>-1.066</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\omega_{V_{\max}}\)</span></td>
+<td>0.3</td>
+<td>0.3</td>
+<td>0.129</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>8</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.198</td>
+<td>0.2</td>
+<td>-1.062</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(K_m\)</span></td>
+<td>1.983</td>
+<td>2</td>
+<td>-0.867</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>30.299</td>
+<td>30</td>
+<td>0.996</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(V_{\max}\)</span></td>
+<td>7.886</td>
+<td>8</td>
+<td>-1.421</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>0.2</td>
+<td>0.2</td>
+<td>0.137</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\omega_{V_{\max}}\)</span></td>
+<td>0.299</td>
+<td>0.3</td>
+<td>-0.207</td>
+<td>20</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>gaussian</td>
+<td>64</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.196</td>
+<td>0.2</td>
+<td>-2.043</td>
+<td>20</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase1-q3-nonlinear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S5: Mean parameter estimates, ground-truth values, relative bias (%), and converged fraction for the Michaelis-Menten elimination model.
+</figcaption>
+</figure>
+</div>
+<div id="supptbl-realdata-k1-vs-khigh" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-supptbl figure">
+<div aria-describedby="supptbl-realdata-k1-vs-khigh-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Dataset</th>
+<th>Parameter</th>
+<th><span class="math inline">\(K_{low}\)</span></th>
+<th>Estimate at <span class="math inline">\(K_{low}\)</span></th>
+<th><span class="math inline">\(K_{high}\)</span></th>
+<th>Estimate at <span class="math inline">\(K_{high}\)</span></th>
+<th>Difference, low vs high (%)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>theophylline</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>1</td>
+<td>0.0399780823466852</td>
+<td>64</td>
+<td>0.0403340132607083</td>
+<td>-0.88</td>
+</tr>
+<tr class="even">
+<td>theophylline</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>1</td>
+<td>0.462426014479654</td>
+<td>64</td>
+<td>0.451795754103843</td>
+<td>2.35</td>
+</tr>
+<tr class="odd">
+<td>theophylline</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>1</td>
+<td>1.28587154582486</td>
+<td>64</td>
+<td>1.34325114760261</td>
+<td>-4.27</td>
+</tr>
+<tr class="even">
+<td>theophylline</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>1</td>
+<td>0.244982675338106</td>
+<td>64</td>
+<td>0.25468847097044</td>
+<td>-3.81</td>
+</tr>
+<tr class="odd">
+<td>theophylline</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>1</td>
+<td>0.0921426595674208</td>
+<td>64</td>
+<td>0.112706010843151</td>
+<td>-18.25</td>
+</tr>
+<tr class="even">
+<td>theophylline</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>1</td>
+<td>0.646337143177343</td>
+<td>64</td>
+<td>0.681958612513379</td>
+<td>-5.22</td>
+</tr>
+<tr class="odd">
+<td>theophylline</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>1</td>
+<td>0.180101969220992</td>
+<td>64</td>
+<td>0.171819171286553</td>
+<td>4.82</td>
+</tr>
+<tr class="even">
+<td>warfarin</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>1</td>
+<td>0.13248491908747</td>
+<td>64</td>
+<td>0.129501583546959</td>
+<td>2.3</td>
+</tr>
+<tr class="odd">
+<td>warfarin</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>1</td>
+<td>7.93874577156758</td>
+<td>64</td>
+<td>8.01992177949496</td>
+<td>-1.01</td>
+</tr>
+<tr class="even">
+<td>warfarin</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>1</td>
+<td>0.616892685826522</td>
+<td>64</td>
+<td>0.636607351452321</td>
+<td>-3.1</td>
+</tr>
+<tr class="odd">
+<td>warfarin</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>1</td>
+<td>0.278323043258703</td>
+<td>64</td>
+<td>0.276191849365181</td>
+<td>0.77</td>
+</tr>
+<tr class="even">
+<td>warfarin</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>1</td>
+<td>0.189539879298354</td>
+<td>64</td>
+<td>0.207381254698046</td>
+<td>-8.6</td>
+</tr>
+<tr class="odd">
+<td>warfarin</td>
+<td><span class="math inline">\(\omega_{k_a}\)</span></td>
+<td>1</td>
+<td>0.811148050786541</td>
+<td>64</td>
+<td>0.977756303038061</td>
+<td>-17.04</td>
+</tr>
+<tr class="even">
+<td>warfarin</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>1</td>
+<td>0.207228141968849</td>
+<td>64</td>
+<td>0.202946291651501</td>
+<td>2.11</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-realdata-k1-vs-khigh-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S6: Parameter estimates at <span class="math inline">\(K=1\)</span> versus <span class="math inline">\(K=64\)</span> for the theophylline and warfarin datasets, with percent difference between the two estimates.
+</figcaption>
+</figure>
+</div>
+<div id="supptbl-psis-ess" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-supptbl figure">
+<div aria-describedby="supptbl-psis-ess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Fit-quality arm</th>
+<th>Mean</th>
+<th>Median</th>
+<th>Minimum</th>
+<th>Maximum</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>bad</td>
+<td>1204.2</td>
+<td>1175.7</td>
+<td>174.7</td>
+<td>2846.5</td>
+</tr>
+<tr class="even">
+<td>good</td>
+<td>1788.7</td>
+<td>1790.8</td>
+<td>10.7</td>
+<td>3217</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-psis-ess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S7: Aggregate importance-sampling effective sample size by fit-quality arm.
+</figcaption>
+</figure>
+</div>
+<div id="supptbl-deltaofv-calibration" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-supptbl figure">
+<div aria-describedby="supptbl-deltaofv-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Condition</th>
+<th>Replicates</th>
+<th>Boundary fraction (%)</th>
+<th>Negative <span class="math inline">\(\Delta\)</span>OFV</th>
+<th>KS statistic</th>
+<th>KS p-value</th>
+<th>Type-I error (%)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>free</td>
+<td>100</td>
+<td>25</td>
+<td>22</td>
+<td>0.2922</td>
+<td>0</td>
+<td>6</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-deltaofv-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S8: <span class="math inline">\(\Delta\mathrm{OFV}\)</span> calibration summary: boundary fraction, number of negative <span class="math inline">\(\Delta\mathrm{OFV}\)</span> values, Kolmogorov-Smirnov statistic and p-value against <span class="math inline">\(\chi^2_1\)</span> for the strictly positive replicates, and empirical type-I error using the correct Self-Liang boundary-mixture cutoff.
+</figcaption>
+</figure>
+</div>
+</section>
 </section>
 
 </main>

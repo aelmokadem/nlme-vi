@@ -273,6 +273,59 @@ sem_value <- function(x) {
 }
 
 
+
+# =============================================================================
+# Publication notation
+# =============================================================================
+
+param_plotmath_labels <- function(values) {
+
+  # Source CSVs use implementation-facing names such as om_CL.
+  # Figures display the corresponding publication notation.  In particular,
+  # om_* values are random-effect standard deviations (omega), whereas Omega
+  # is reserved for the covariance matrix in the manuscript equations.
+
+  label_text <- c(
+    "CL" = "CL",
+    "V" = "V",
+    "ka" = "k[a]",
+    "sigma" = "sigma",
+    "Vmax" = "V[max]",
+    "Km" = "K[m]",
+    "om_CL" = "omega[CL]",
+    "om_V" = "omega[V]",
+    "om_ka" = "omega[k[a]]",
+    "om_Vmax" = "omega[V[max]]",
+    "om_Km" = "omega[K[m]]"
+  )
+
+  text <- unname(
+    label_text[
+      as.character(values)
+    ]
+  )
+
+  missing <- is.na(text)
+  text[missing] <- as.character(values)[missing]
+
+  parse(
+    text = text
+  )
+}
+
+
+add_param_legend_scales <- function(plot) {
+
+  plot +
+    scale_color_discrete(
+      labels = param_plotmath_labels
+    ) +
+    scale_shape_discrete(
+      labels = param_plotmath_labels
+    )
+}
+
+
 # =============================================================================
 # Phase 0
 # =============================================================================
@@ -342,7 +395,13 @@ fig_phase0 <- function(
     ) +
     labs(
       x = "K",
-      y = "relative bias in omega (%)"
+      y = expression("Relative bias in " * omega * " (%)")
+    ) +
+    scale_color_discrete(
+      labels = param_plotmath_labels
+    ) +
+    scale_shape_discrete(
+      labels = param_plotmath_labels
     ) +
     theme_manuscript()
 
@@ -368,12 +427,14 @@ fig_phase0_fixed_effects <- function(
   out_dir
 ) {
 
-  # Companion to the Phase 0 omega figure.
+  # Companion to the Phase 0 random-effect-SD figure.
   #
-  # Shows that fixed effects and residual error remain approximately
-  # unbiased across K, in contrast to the K-dependent omega bias.
+  # Shows the K-dependence (or lack thereof) of fixed effects and residual
+  # error alongside the main random-effect-SD result. This is intentionally
+  # descriptive: some parameters (e.g. ka) may show persistent K-independent
+  # bias, while sigma can partially compensate for BSV at low K.
   #
-  # Uses the exact same fits as fig_phase0(); only non-omega parameters
+  # Uses the exact same fits as fig_phase0(); only non-random-effect-SD parameters
   # are selected.
 
   plot_df <- df %>%
@@ -402,7 +463,7 @@ fig_phase0_fixed_effects <- function(
   if (nrow(plot_df) == 0) {
 
     cat(
-      "[skip] Phase 0 fixed-effect figure: no non-omega rows found\n"
+      "[skip] Phase 0 fixed-effect figure: no non-random-effect-SD rows found\n"
     )
 
     return(invisible(NULL))
@@ -446,9 +507,15 @@ fig_phase0_fixed_effects <- function(
     ) +
     labs(
       x = "K",
-      y = "relative bias (%)",
+      y = "Relative bias (%)",
       color = NULL,
       shape = NULL
+    ) +
+    scale_color_discrete(
+      labels = param_plotmath_labels
+    ) +
+    scale_shape_discrete(
+      labels = param_plotmath_labels
     ) +
     theme_manuscript()
 
@@ -477,10 +544,10 @@ fig_phase1_grid <- function(
 
   # This intentionally mirrors the Python figure:
   #
-  #   1. keep omega rows
+  #   1. keep random-effect-SD rows
   #   2. keep dense/sparse scenarios
   #   3. within each scenario/family/posterior,
-  #      average rel_bias_pct over replicates AND omega parameters at each K
+  #      average rel_bias_pct over replicates AND random-effect-SD parameters at each K
   #
   # The manuscript table retains parameter-specific results separately.
 
@@ -499,7 +566,7 @@ fig_phase1_grid <- function(
   if (nrow(om) == 0) {
 
     cat(
-      "[skip] Phase 1 grid figure: no dense/sparse omega rows found\n"
+      "[skip] Phase 1 grid figure: no dense/sparse random-effect-SD rows found\n"
     )
 
     return(invisible(NULL))
@@ -605,7 +672,7 @@ fig_phase1_grid <- function(
     ) +
     labs(
       x = "K",
-      y = "omega bias (%)"
+      y = expression("Relative bias in " * omega * " (%)")
     ) +
     theme_manuscript()
 
@@ -636,7 +703,7 @@ fig_phase1_grid_fixed_effects <- function(
   out_dir
 ) {
 
-  # Companion to the Phase 1 omega grid.
+  # Companion to the Phase 1 random-effect-SD grid.
   #
   # Rows    = sampling scenario
   # Columns = variational family
@@ -663,7 +730,7 @@ fig_phase1_grid_fixed_effects <- function(
 
     cat(
       "[skip] Phase 1 fixed-effect figure: ",
-      "no dense/sparse non-omega rows found\n",
+      "no dense/sparse non-random-effect-SD rows found\n",
       sep = ""
     )
 
@@ -751,9 +818,15 @@ fig_phase1_grid_fixed_effects <- function(
     ) +
     labs(
       x = "K",
-      y = "relative bias (%)",
+      y = "Relative bias (%)",
       color = NULL,
       shape = NULL
+    ) +
+    scale_color_discrete(
+      labels = param_plotmath_labels
+    ) +
+    scale_shape_discrete(
+      labels = param_plotmath_labels
     ) +
     theme_manuscript()
 
@@ -810,7 +883,7 @@ fig_nonlinear <- function(
   if (nrow(om) == 0) {
 
     cat(
-      "[skip] nonlinear figure: no omega rows found\n"
+      "[skip] nonlinear figure: no random-effect-SD rows found\n"
     )
 
     return(invisible(NULL))
@@ -867,7 +940,13 @@ fig_nonlinear <- function(
     ) +
     labs(
       x = "K",
-      y = "relative bias in omega (%)"
+      y = expression("Relative bias in " * omega * " (%)")
+    ) +
+    scale_color_discrete(
+      labels = param_plotmath_labels
+    ) +
+    scale_shape_discrete(
+      labels = param_plotmath_labels
     ) +
     theme_manuscript()
 
@@ -955,7 +1034,7 @@ fig_realdata <- function(
   if (length(plot_data) == 0) {
 
     cat(
-      "[skip] real-data figure: no omega columns found\n"
+      "[skip] real-data figure: no random-effect-SD columns found\n"
     )
 
     return(invisible(NULL))
@@ -988,8 +1067,11 @@ fig_realdata <- function(
     ) +
     labs(
       x = NULL,
-      y = "omega estimate",
+      y = expression(omega ~ " estimate"),
       fill = NULL
+    ) +
+    scale_x_discrete(
+      labels = param_plotmath_labels
     ) +
     theme_manuscript()
 
@@ -1200,7 +1282,7 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  # Main omega-bias figure
+  # Main random-effect-SD-bias figure
   fig_phase0(
     df,
     args$out
@@ -1225,7 +1307,7 @@ df_phase1 <- try_load(
 
 if (!is.null(df_phase1)) {
 
-  # Main omega-bias figure
+  # Main random-effect-SD-bias figure
   fig_phase1_grid(
     df_phase1,
     args$out
