@@ -5,26 +5,22 @@
 #
 # Manuscript figures from already-generated project result CSVs.
 #
-# IMPORTANT:
-#   This is a PURE POST-PROCESSING script.
+# PURE POST-PROCESSING ONLY:
+#   - reads result CSVs
+#   - calculates summaries required for plotting
+#   - creates manuscript PNG figures
 #
-#   It does NOT:
-#     - run any model
-#     - run nlmixr2
-#     - run Python
-#     - run simulations
-#     - source phase scripts
-#     - modify source result CSVs
+# This script does NOT:
+#   - run models
+#   - run simulations
+#   - call nlmixr2
+#   - call Python
+#   - source analysis scripts
+#   - modify source result CSVs
 #
-#   It ONLY:
-#     1. reads explicitly supplied CSV files
-#     2. summarizes values where required for plotting
-#     3. creates manuscript figures
-#     4. writes PNG files
-#
-# Figures intentionally contain NO manuscript captions or descriptive
-# supertitles. Only axis labels, legends, and panel labels needed to
-# interpret the figures are included.
+# Figures deliberately contain NO manuscript captions or descriptive
+# supertitles. Only axis labels, legends, and facet labels required to
+# interpret each plot are included.
 #
 # USAGE
 #
@@ -39,7 +35,9 @@
 #   --psis-csv outputs/phase2_psis_results.csv \
 #   --out publication/figures
 #
-# Any input flag may be omitted. Its corresponding figure is skipped.
+# Any flag may be omitted. Its corresponding figure is skipped.
+#
+# Relative paths are resolved from the project root using here::here().
 # =============================================================================
 
 
@@ -48,11 +46,12 @@ suppressPackageStartupMessages({
   library(readr)
   library(tidyr)
   library(ggplot2)
+  library(here)
 })
 
 
 # =============================================================================
-# Command-line arguments
+# Arguments
 # =============================================================================
 
 parse_args <- function(args) {
@@ -82,7 +81,6 @@ parse_args <- function(args) {
   )
 
   out <- defaults
-
   i <- 1
 
   while (i <= length(args)) {
@@ -107,27 +105,82 @@ parse_args <- function(args) {
 }
 
 
-args <- parse_args(commandArgs(trailingOnly = TRUE))
+args <- parse_args(
+  commandArgs(trailingOnly = TRUE)
+)
+
+
+# =============================================================================
+# Path handling
+# =============================================================================
+
+is_absolute_path <- function(path) {
+
+  if (is.null(path) || !nzchar(path)) {
+    return(FALSE)
+  }
+
+  grepl(
+    "^(/|~[/\\\\]|[A-Za-z]:[/\\\\])",
+    path
+  )
+}
+
+
+resolve_path <- function(path) {
+
+  if (is.null(path) || !nzchar(path)) {
+    return(NULL)
+  }
+
+  path <- path.expand(path)
+
+  if (is_absolute_path(path)) {
+    return(path)
+  }
+
+  here::here(path)
+}
 
 
 # =============================================================================
 # Utilities
 # =============================================================================
 
-try_load <- function(path, label) {
+try_load <- function(
+  path,
+  label
+) {
 
   if (is.null(path) || !nzchar(path)) {
-    cat(sprintf("[skip] %s: no path given\n", label))
+
+    cat(
+      sprintf(
+        "[skip] %s: no path given\n",
+        label
+      )
+    )
+
     return(NULL)
   }
 
-  if (!file.exists(path)) {
-    cat(sprintf("[skip] %s: %s not found\n", label, path))
+  resolved <- resolve_path(path)
+
+  if (!file.exists(resolved)) {
+
+    cat(
+      sprintf(
+        "[skip] %s: %s not found\n",
+        label,
+        resolved
+      )
+    )
+
     return(NULL)
   }
 
   df <- read_csv(
-    path,
+    resolved,
     show_col_types = FALSE
   )
 
@@ -135,7 +188,7 @@ try_load <- function(path, label) {
     sprintf(
       "[loaded] %s: %s (%d rows)\n",
       label,
-      path,
+      resolved,
       nrow(df)
     )
   )
@@ -151,6 +204,8 @@ savefig <- function(
   width,
   height
 ) {
+
+  out_dir <- resolve_path(out_dir)
 
   dir.create(
     out_dir,
@@ -189,41 +244,37 @@ theme_manuscript <- function() {
   ) +
     theme(
       panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(
+        linewidth = 0.25
+      ),
       legend.title = element_blank(),
       strip.background = element_rect(
         fill = "white"
+      ),
+      strip.text = element_text(
+        face = "bold"
       )
     )
 }
 
 
-mean_sem <- function(x) {
+sem_value <- function(x) {
 
-  n <- sum(
-    !is.na(x)
-  )
+  x <- x[
+    is.finite(x)
+  ]
 
-  tibble(
-    mean = mean(
-      x,
-      na.rm = TRUE
-    ),
-    sem = if (
-      n > 1
-    ) {
-      sd(
-        x,
-        na.rm = TRUE
-      ) / sqrt(n)
-    } else {
-      NA_real_
-    }
-  )
+  if (length(x) <= 1) {
+    return(NA_real_)
+  }
+
+  sd(x) /
+    sqrt(length(x))
 }
 
 
 # =============================================================================
-# Figure builders
+# Phase 0
 # =============================================================================
 
 fig_phase0 <- function(
@@ -233,7 +284,10 @@ fig_phase0 <- function(
 
   plot_df <- df %>%
     filter(
-      startsWith(param, "om_")
+      startsWith(
+        as.character(param),
+        "om_"
+      )
     ) %>%
     group_by(
       posterior,
@@ -245,13 +299,9 @@ fig_phase0 <- function(
         rel_bias_pct,
         na.rm = TRUE
       ),
-      sem = sd(
-        rel_bias_pct,
-        na.rm = TRUE
-      ) /
-        sqrt(
-          sum(!is.na(rel_bias_pct))
-        ),
+      sem = sem_value(
+        rel_bias_pct
+      ),
       .groups = "drop"
     )
 
@@ -296,7 +346,7 @@ fig_phase0 <- function(
     ) +
     theme_manuscript()
 
-  n_post <- length(
+  n_posteriors <- length(
     unique(plot_df$posterior)
   )
 
@@ -304,25 +354,75 @@ fig_phase0 <- function(
     p,
     "fig_phase0_omega_bias",
     out_dir,
-    width = 5.5 * max(n_post, 1),
+    width = 5.5 * max(n_posteriors, 1),
     height = 4.2
   )
 }
 
+
+# =============================================================================
+# Phase 1 linear grid
+# =============================================================================
 
 fig_phase1_grid <- function(
   df,
   out_dir
 ) {
 
-  plot_df <- df %>%
+  # This intentionally mirrors the Python figure:
+  #
+  #   1. keep omega rows
+  #   2. keep dense/sparse scenarios
+  #   3. within each scenario/family/posterior,
+  #      average rel_bias_pct over replicates AND omega parameters at each K
+  #
+  # The manuscript table retains parameter-specific results separately.
+
+  om <- df %>%
     filter(
-      startsWith(param, "om_"),
+      startsWith(
+        as.character(param),
+        "om_"
+      ),
       scenario %in% c(
         "dense",
         "sparse"
       )
-    ) %>%
+    )
+
+  if (nrow(om) == 0) {
+
+    cat(
+      "[skip] Phase 1 grid figure: no dense/sparse omega rows found\n"
+    )
+
+    return(invisible(NULL))
+  }
+
+  # Helpful diagnostic: these are the raw combinations in the CSV BEFORE
+  # summarization. This makes any difference from the Python result obvious.
+  cat(
+    "\nPhase 1 raw figure combinations:\n"
+  )
+
+  print(
+    om %>%
+      count(
+        scenario,
+        family,
+        posterior,
+        name = "n_rows"
+      ) %>%
+      arrange(
+        scenario,
+        family,
+        posterior
+      ),
+    n = Inf
+  )
+
+
+  plot_df <- om %>%
     group_by(
       scenario,
       family,
@@ -334,15 +434,33 @@ fig_phase1_grid <- function(
         rel_bias_pct,
         na.rm = TRUE
       ),
-      sem = sd(
-        rel_bias_pct,
-        na.rm = TRUE
-      ) /
-        sqrt(
-          sum(!is.na(rel_bias_pct))
-        ),
+      sem = sem_value(
+        rel_bias_pct
+      ),
       .groups = "drop"
     )
+
+
+  cat(
+    "\nPhase 1 plotted combinations:\n"
+  )
+
+  print(
+    plot_df %>%
+      count(
+        scenario,
+        family,
+        posterior,
+        name = "n_K_values"
+      ) %>%
+      arrange(
+        scenario,
+        family,
+        posterior
+      ),
+    n = Inf
+  )
+
 
   p <- ggplot(
     plot_df,
@@ -377,8 +495,7 @@ fig_phase1_grid <- function(
     ) +
     facet_grid(
       rows = vars(scenario),
-      cols = vars(family),
-      scales = "free_y"
+      cols = vars(family)
     ) +
     labs(
       x = "K",
@@ -386,11 +503,12 @@ fig_phase1_grid <- function(
     ) +
     theme_manuscript()
 
-  n_family <- length(
+
+  n_families <- length(
     unique(plot_df$family)
   )
 
-  n_scenario <- length(
+  n_scenarios <- length(
     unique(plot_df$scenario)
   )
 
@@ -398,11 +516,15 @@ fig_phase1_grid <- function(
     p,
     "fig_phase1_grid",
     out_dir,
-    width = 5.5 * max(n_family, 1),
-    height = 4 * max(n_scenario, 1)
+    width = 5.5 * max(n_families, 1),
+    height = 4 * max(n_scenarios, 1)
   )
 }
 
+
+# =============================================================================
+# Nonlinear tier
+# =============================================================================
 
 fig_nonlinear <- function(
   df,
@@ -417,10 +539,25 @@ fig_nonlinear <- function(
       )
   }
 
-  plot_df <- df %>%
+  om <- df %>%
     filter(
-      startsWith(param, "om_")
-    ) %>%
+      startsWith(
+        as.character(param),
+        "om_"
+      )
+    )
+
+  if (nrow(om) == 0) {
+
+    cat(
+      "[skip] nonlinear figure: no omega rows found\n"
+    )
+
+    return(invisible(NULL))
+  }
+
+
+  plot_df <- om %>%
     group_by(
       param,
       K
@@ -430,15 +567,12 @@ fig_nonlinear <- function(
         rel_bias_pct,
         na.rm = TRUE
       ),
-      sem = sd(
-        rel_bias_pct,
-        na.rm = TRUE
-      ) /
-        sqrt(
-          sum(!is.na(rel_bias_pct))
-        ),
+      sem = sem_value(
+        rel_bias_pct
+      ),
       .groups = "drop"
     )
+
 
   p <- ggplot(
     plot_df,
@@ -477,6 +611,7 @@ fig_nonlinear <- function(
     ) +
     theme_manuscript()
 
+
   savefig(
     p,
     "fig_phase1_nonlinear",
@@ -487,6 +622,10 @@ fig_nonlinear <- function(
 }
 
 
+# =============================================================================
+# Real data
+# =============================================================================
+
 fig_realdata <- function(
   datasets,
   out_dir
@@ -494,9 +633,10 @@ fig_realdata <- function(
 
   plot_data <- list()
 
-  for (name in names(datasets)) {
 
-    df <- datasets[[name]]
+  for (dataset_name in names(datasets)) {
+
+    df <- datasets[[dataset_name]]
 
     om_cols <- names(df)[
       startsWith(
@@ -504,6 +644,10 @@ fig_realdata <- function(
         "om_"
       )
     ]
+
+    if (length(om_cols) == 0) {
+      next
+    }
 
     k_lo <- min(
       df$K,
@@ -515,6 +659,9 @@ fig_realdata <- function(
       na.rm = TRUE
     )
 
+
+    # No slice_match() here.
+    # This is deliberately simple and compatible with standard dplyr.
     sub <- df %>%
       filter(
         K %in% c(
@@ -526,39 +673,46 @@ fig_realdata <- function(
         K,
         all_of(om_cols)
       ) %>%
-      slice_match(
-        K,
-        c(
-          k_lo,
-          k_hi
-        )
-      ) %>%
       pivot_longer(
         cols = all_of(om_cols),
         names_to = "param",
         values_to = "estimate"
       ) %>%
       mutate(
-        dataset = name,
-        K = paste0(
+        dataset = dataset_name,
+        K_label = paste0(
           "K=",
           K
         )
       )
 
-    plot_data[[length(plot_data) + 1]] <- sub
+
+    plot_data[[length(plot_data) + 1]] <-
+      sub
   }
+
+
+  if (length(plot_data) == 0) {
+
+    cat(
+      "[skip] real-data figure: no omega columns found\n"
+    )
+
+    return(invisible(NULL))
+  }
+
 
   plot_df <- bind_rows(
     plot_data
   )
+
 
   p <- ggplot(
     plot_df,
     aes(
       x = param,
       y = estimate,
-      fill = K
+      fill = K_label
     )
   ) +
     geom_col(
@@ -579,7 +733,8 @@ fig_realdata <- function(
     ) +
     theme_manuscript()
 
-  n_dataset <- length(
+
+  n_datasets <- length(
     unique(plot_df$dataset)
   )
 
@@ -587,11 +742,15 @@ fig_realdata <- function(
     p,
     "fig_realdata_k1_vs_khigh",
     out_dir,
-    width = 5 * max(n_dataset, 1),
+    width = 5 * max(n_datasets, 1),
     height = 4.2
   )
 }
 
+
+# =============================================================================
+# dOFV calibration
+# =============================================================================
 
 fig_deltaofv <- function(
   conditions,
@@ -612,6 +771,23 @@ fig_deltaofv <- function(
     )
   )
 
+
+  empirical <- empirical %>%
+    filter(
+      is.finite(dofv)
+    )
+
+
+  if (nrow(empirical) == 0) {
+
+    cat(
+      "[skip] dOFV figure: no finite dOFV values found\n"
+    )
+
+    return(invisible(NULL))
+  }
+
+
   xmax <- max(
     c(
       empirical$dofv,
@@ -620,8 +796,11 @@ fig_deltaofv <- function(
     na.rm = TRUE
   )
 
+
   reference <- expand_grid(
-    condition = names(conditions),
+    condition = unique(
+      empirical$condition
+    ),
     dofv = seq(
       0.01,
       xmax,
@@ -635,6 +814,7 @@ fig_deltaofv <- function(
           df = 1
         )
     )
+
 
   p <- ggplot(
     empirical,
@@ -673,7 +853,8 @@ fig_deltaofv <- function(
     ) +
     theme_manuscript()
 
-  n_condition <- length(
+
+  n_conditions <- length(
     unique(empirical$condition)
   )
 
@@ -681,11 +862,15 @@ fig_deltaofv <- function(
     p,
     "fig_deltaofv_calibration",
     out_dir,
-    width = 6 * max(n_condition, 1),
+    width = 6 * max(n_conditions, 1),
     height = 4.5
   )
 }
 
+
+# =============================================================================
+# PSIS / ESS
+# =============================================================================
 
 fig_psis <- function(
   df,
@@ -711,6 +896,7 @@ fig_psis <- function(
     ) +
     theme_manuscript()
 
+
   savefig(
     p,
     "fig_psis_ess",
@@ -735,8 +921,18 @@ cat(
   )
 )
 
+cat(
+  sprintf(
+    "Project root: %s\n",
+    here::here()
+  )
+)
 
+
+# -----------------------------------------------------------------------------
 # Phase 0
+# -----------------------------------------------------------------------------
+
 df <- try_load(
   args$phase0_csv,
   "Phase 0"
@@ -751,7 +947,10 @@ if (!is.null(df)) {
 }
 
 
+# -----------------------------------------------------------------------------
 # Phase 1 grid
+# -----------------------------------------------------------------------------
+
 df_phase1 <- try_load(
   args$phase1_csv,
   "Phase 1 grid"
@@ -766,32 +965,44 @@ if (!is.null(df_phase1)) {
 }
 
 
+# -----------------------------------------------------------------------------
 # Nonlinear
+# -----------------------------------------------------------------------------
+
 nonlinear_path <- if (
   !is.null(args$nonlinear_csv)
 ) {
+
   args$nonlinear_csv
+
 } else {
+
   args$phase1_csv
 }
+
 
 df_nonlinear <- try_load(
   nonlinear_path,
   "Phase 1 nonlinear"
 )
 
+
 if (!is.null(df_nonlinear)) {
 
   has_nonlinear <- if (
     "scenario" %in% names(df_nonlinear)
   ) {
+
     any(
       df_nonlinear$scenario == "nonlinear",
       na.rm = TRUE
     )
+
   } else {
+
     TRUE
   }
+
 
   if (has_nonlinear) {
 
@@ -804,15 +1015,19 @@ if (!is.null(df_nonlinear)) {
 
     cat(
       "[skip] nonlinear figure: ",
-      "no 'nonlinear' scenario rows in the given file\n",
+      "no 'nonlinear' scenario rows in the supplied file\n",
       sep = ""
     )
   }
 }
 
 
+# -----------------------------------------------------------------------------
 # Real data
+# -----------------------------------------------------------------------------
+
 realdata <- list()
+
 
 df <- try_load(
   args$theoph_csv,
@@ -821,8 +1036,10 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  realdata[["theophylline"]] <- df
+  realdata[["theophylline"]] <-
+    df
 }
+
 
 df <- try_load(
   args$warfarin_csv,
@@ -831,8 +1048,10 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  realdata[["warfarin"]] <- df
+  realdata[["warfarin"]] <-
+    df
 }
+
 
 if (length(realdata) > 0) {
 
@@ -843,8 +1062,12 @@ if (length(realdata) > 0) {
 }
 
 
+# -----------------------------------------------------------------------------
 # dOFV calibration
+# -----------------------------------------------------------------------------
+
 calibration <- list()
+
 
 df <- try_load(
   args$deltaofv_free_csv,
@@ -853,8 +1076,10 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  calibration[["free"]] <- df
+  calibration[["free"]] <-
+    df
 }
+
 
 df <- try_load(
   args$deltaofv_amortized_csv,
@@ -863,8 +1088,10 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  calibration[["amortized"]] <- df
+  calibration[["amortized"]] <-
+    df
 }
+
 
 if (length(calibration) > 0) {
 
@@ -875,7 +1102,10 @@ if (length(calibration) > 0) {
 }
 
 
+# -----------------------------------------------------------------------------
 # PSIS
+# -----------------------------------------------------------------------------
+
 df <- try_load(
   args$psis_csv,
   "PSIS"
@@ -893,6 +1123,6 @@ if (!is.null(df)) {
 cat(
   sprintf(
     "\nDone. Figures written to %s/\n",
-    args$out
+    resolve_path(args$out)
   )
 )

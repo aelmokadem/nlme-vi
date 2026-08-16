@@ -250,6 +250,35 @@ publication_figures() {
         --out publication/figures
 }
 
+#--------# R versions #-------#
+
+publication_tables_r() {
+    Rscript publication/make_tables.R \
+        --phase0-csv outputs/phase0_results.csv \
+        --phase1-csv outputs/phase1_linear_combined.csv \
+        --nonlinear-csv outputs/phase1_nonlinear_results.csv \
+        --theoph-csv outputs/phase2_realdata_theoph.csv \
+        --warfarin-csv outputs/phase2_realdata_warfarin.csv \
+        --deltaofv-free-csv outputs/phase2_deltaofv_free.csv \
+        --deltaofv-amortized-csv outputs/phase2_deltaofv_amortized_n300.csv \
+        --psis-csv outputs/phase2_psis_results.csv \
+        --baseline-csv outputs/phase2_baselines/phase2_baseline_comparison.csv \
+        --out publication/tables
+}
+
+publication_figures_r() {
+    Rscript publication/make_figures.R \
+        --phase0-csv outputs/phase0_results.csv \
+        --phase1-csv outputs/phase1_linear_combined.csv \
+        --nonlinear-csv outputs/phase1_nonlinear_results.csv \
+        --theoph-csv outputs/phase2_realdata_theoph.csv \
+        --warfarin-csv outputs/phase2_realdata_warfarin.csv \
+        --deltaofv-free-csv outputs/phase2_deltaofv_free.csv \
+        --deltaofv-amortized-csv outputs/phase2_deltaofv_amortized_n300.csv \
+        --psis-csv outputs/phase2_psis_results.csv \
+        --out publication/figures
+}
+
 # --------------------------------------------------------------- dispatch
 # Only dispatch when EXECUTED directly (bash commands.sh ...), not when
 # SOURCED (source commands.sh). Without this check, sourcing would hit the
