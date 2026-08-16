@@ -359,6 +359,112 @@ fig_phase0 <- function(
   )
 }
 
+# =============================================================================
+# Phase 0 fixed-effect / residual-error validation
+# =============================================================================
+
+fig_phase0_fixed_effects <- function(
+  df,
+  out_dir
+) {
+
+  # Companion to the Phase 0 omega figure.
+  #
+  # Shows that fixed effects and residual error remain approximately
+  # unbiased across K, in contrast to the K-dependent omega bias.
+  #
+  # Uses the exact same fits as fig_phase0(); only non-omega parameters
+  # are selected.
+
+  plot_df <- df %>%
+    filter(
+      !startsWith(
+        as.character(param),
+        "om_"
+      )
+    ) %>%
+    group_by(
+      posterior,
+      param,
+      K
+    ) %>%
+    summarise(
+      mean = mean(
+        rel_bias_pct,
+        na.rm = TRUE
+      ),
+      sem = sem_value(
+        rel_bias_pct
+      ),
+      .groups = "drop"
+    )
+
+  if (nrow(plot_df) == 0) {
+
+    cat(
+      "[skip] Phase 0 fixed-effect figure: no non-omega rows found\n"
+    )
+
+    return(invisible(NULL))
+  }
+
+
+  p <- ggplot(
+    plot_df,
+    aes(
+      x = K,
+      y = mean,
+      group = param,
+      color = param,
+      shape = param
+    )
+  ) +
+    geom_hline(
+      yintercept = 0,
+      linetype = "dashed",
+      linewidth = 0.4
+    ) +
+    geom_errorbar(
+      aes(
+        ymin = mean - sem,
+        ymax = mean + sem
+      ),
+      width = 0.08
+    ) +
+    geom_line() +
+    geom_point(
+      size = 2
+    ) +
+    scale_x_log10(
+      breaks = sort(
+        unique(plot_df$K)
+      )
+    ) +
+    facet_wrap(
+      ~ posterior,
+      nrow = 1
+    ) +
+    labs(
+      x = "K",
+      y = "relative bias (%)",
+      color = NULL,
+      shape = NULL
+    ) +
+    theme_manuscript()
+
+
+  n_posteriors <- length(
+    unique(plot_df$posterior)
+  )
+
+  savefig(
+    p,
+    "fig_phase0_fixed_effects",
+    out_dir,
+    width = 5.5 * max(n_posteriors, 1),
+    height = 4.2
+  )
+}
 
 # =============================================================================
 # Phase 1 linear grid
@@ -521,6 +627,160 @@ fig_phase1_grid <- function(
   )
 }
 
+# =============================================================================
+# Phase 1 fixed-effect / residual-error validation
+# =============================================================================
+
+fig_phase1_grid_fixed_effects <- function(
+  df,
+  out_dir
+) {
+
+  # Companion to the Phase 1 omega grid.
+  #
+  # Rows    = sampling scenario
+  # Columns = variational family
+  #
+  # Individual lines represent fixed effects / residual error.
+  #
+  # Posterior architecture is shown using facets within each
+  # scenario/family combination so that parameter-specific behavior
+  # is not averaged away.
+
+  fe <- df %>%
+    filter(
+      !startsWith(
+        as.character(param),
+        "om_"
+      ),
+      scenario %in% c(
+        "dense",
+        "sparse"
+      )
+    )
+
+  if (nrow(fe) == 0) {
+
+    cat(
+      "[skip] Phase 1 fixed-effect figure: ",
+      "no dense/sparse non-omega rows found\n",
+      sep = ""
+    )
+
+    return(invisible(NULL))
+  }
+
+
+  cat(
+    "\nPhase 1 fixed-effect figure combinations:\n"
+  )
+
+  print(
+    fe %>%
+      count(
+        scenario,
+        family,
+        posterior,
+        param,
+        name = "n_rows"
+      ) %>%
+      arrange(
+        scenario,
+        family,
+        posterior,
+        param
+      ),
+    n = Inf
+  )
+
+
+  plot_df <- fe %>%
+    group_by(
+      scenario,
+      family,
+      posterior,
+      param,
+      K
+    ) %>%
+    summarise(
+      mean = mean(
+        rel_bias_pct,
+        na.rm = TRUE
+      ),
+      sem = sem_value(
+        rel_bias_pct
+      ),
+      .groups = "drop"
+    )
+
+
+  p <- ggplot(
+    plot_df,
+    aes(
+      x = K,
+      y = mean,
+      group = param,
+      color = param,
+      shape = param
+    )
+  ) +
+    geom_hline(
+      yintercept = 0,
+      linetype = "dashed",
+      linewidth = 0.4
+    ) +
+    geom_errorbar(
+      aes(
+        ymin = mean - sem,
+        ymax = mean + sem
+      ),
+      width = 0.08
+    ) +
+    geom_line() +
+    geom_point(
+      size = 2
+    ) +
+    scale_x_log10(
+      breaks = sort(
+        unique(plot_df$K)
+      )
+    ) +
+    facet_grid(
+      rows = vars(scenario),
+      cols = vars(family, posterior)
+    ) +
+    labs(
+      x = "K",
+      y = "relative bias (%)",
+      color = NULL,
+      shape = NULL
+    ) +
+    theme_manuscript()
+
+
+  n_families <- length(
+    unique(plot_df$family)
+  )
+
+  n_posteriors <- length(
+    unique(plot_df$posterior)
+  )
+
+  n_scenarios <- length(
+    unique(plot_df$scenario)
+  )
+
+
+  savefig(
+    p,
+    "fig_phase1_grid_fixed_effects",
+    out_dir,
+    width = 4.2 *
+      max(n_families * n_posteriors, 1),
+    height = 4 *
+      max(n_scenarios, 1)
+  )
+}
 
 # =============================================================================
 # Nonlinear tier
@@ -940,7 +1200,14 @@ df <- try_load(
 
 if (!is.null(df)) {
 
+  # Main omega-bias figure
   fig_phase0(
+    df,
+    args$out
+  )
+
+  # Supplementary validation figure
+  fig_phase0_fixed_effects(
     df,
     args$out
   )
@@ -958,7 +1225,14 @@ df_phase1 <- try_load(
 
 if (!is.null(df_phase1)) {
 
+  # Main omega-bias figure
   fig_phase1_grid(
+    df_phase1,
+    args$out
+  )
+
+  # Supplementary validation figure
+  fig_phase1_grid_fixed_effects(
     df_phase1,
     args$out
   )
