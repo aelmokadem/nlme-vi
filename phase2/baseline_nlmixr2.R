@@ -81,17 +81,54 @@ one_cmt_oral <- function() {
 
   model({
 
-    CL <- exp(lCL + eta.CL)
-    V  <- exp(lV  + eta.V)
-    Ka <- exp(lKa + eta.Ka)
+    # ---------------------------------------------------------------------
+    # ANALYTIC SOLUTION (linCmt()) -- matches VI's OneCmtOral exactly, which
+    # evaluates this same linear one-compartment/first-order-absorption
+    # system via its closed-form formula, not numerical integration. Using
+    # the ODE form below for this model (which has a known closed form)
+    # would make any runtime comparison unfair: rxode2 would be paying for
+    # numerical integration at every likelihood evaluation during FOCEI's
+    # linearization and SAEM's EM steps, on the R side only, for no reason
+    # other than which solver happened to be picked -- inflating R's
+    # reported runtime for a reason that has nothing to do with FOCEI/SAEM
+    # as estimation algorithms. linCmt() auto-detects a one-compartment,
+    # first-order-absorption model from the lowercase cl/v/ka parameter
+    # names in scope -- this naming convention is the one point here that
+    # should be verified on a small dataset (e.g. via baselines_r_direct)
+    # before trusting a full run, same as every other accessor in this
+    # script; nlmixr2's exact auto-detection rules can vary by version.
+    # ---------------------------------------------------------------------
+    cl <- exp(lCL + eta.CL)
+    v  <- exp(lV  + eta.V)
+    ka <- exp(lKa + eta.Ka)
 
-    d/dt(depot)  <- -Ka * depot
-    d/dt(center) <- Ka * depot - (CL / V) * center
-
-    cp <- center / V
+    cp <- linCmt()
     logcp <- log(cp)
 
     logcp ~ add(add.sd)
+
+    # ---------------------------------------------------------------------
+    # ODE VERSION (commented out) -- numerically integrates the identical
+    # linear system via rxode2's solver instead of the closed form above.
+    # Parameter estimates from this form should match the analytic form
+    # closely (same underlying math), but runtime will NOT match -- this
+    # form is slower per likelihood evaluation and should only be used if
+    # linCmt()'s auto-detection above turns out not to work for some
+    # nlmixr2/rxode2 version, or if a future model extension (e.g. a
+    # structure linCmt() can't represent) requires numerical integration.
+    #
+    # CL <- exp(lCL + eta.CL)
+    # V  <- exp(lV  + eta.V)
+    # Ka <- exp(lKa + eta.Ka)
+    #
+    # d/dt(depot)  <- -Ka * depot
+    # d/dt(center) <- Ka * depot - (CL / V) * center
+    #
+    # cp <- center / V
+    # logcp <- log(cp)
+    #
+    # logcp ~ add(add.sd)
+    # ---------------------------------------------------------------------
   })
 }
 
@@ -107,8 +144,16 @@ cat(
   )
 )
 
-# proc.time()[["elapsed"]] measures wall-clock elapsed time.
-start_time <- proc.time()[["elapsed"]]
+# proc.time() returns a named vector: user.self, sys.self, elapsed (plus
+# child-process components). elapsed alone is WALL-CLOCK time, vulnerable
+# to the same sleep/contention noise documented throughout this project's
+# Python-side timing (see nlme_vi_phase2_baselines.py). user.self + sys.self
+# is the CPU-time equivalent of Python's time.process_time(), immune to
+# that noise -- that is the quantity nlme_vi_phase2_baselines.py expects,
+# in a column named cpu_secs, for the fair apples-to-apples comparison
+# against VI's own cpu_secs. wall_secs is also written, for context only,
+# matching the sibling convention used on the Python/VI side.
+start_time <- proc.time()
 
 if (method == "foce") {
 
@@ -136,17 +181,23 @@ if (method == "foce") {
 
 }
 
-end_time <- proc.time()[["elapsed"]]
+end_time <- proc.time()
 
-runtime_s <- as.numeric(
-  end_time - start_time
+cpu_secs <- unname(
+  (end_time["user.self"] + end_time["sys.self"]) -
+  (start_time["user.self"] + start_time["sys.self"])
+)
+
+wall_secs <- unname(
+  end_time["elapsed"] - start_time["elapsed"]
 )
 
 cat(
   sprintf(
-    "%s fit completed in %.3f seconds\n",
+    "%s fit completed in %.3f CPU seconds (%.3f wall seconds)\n",
     toupper(method),
-    runtime_s
+    cpu_secs,
+    wall_secs
   )
 )
 
@@ -368,9 +419,12 @@ result <- tibble(
     fit
   ),
 
-  # IMPORTANT:
-  # Use a standard runtime column name for downstream comparison tables.
-  runtime_s = runtime_s,
+  # IMPORTANT: column names must match what nlme_vi_phase2_baselines.py
+  # reads back via getattr(r, "cpu_secs", ...) / getattr(r, "wall_secs", ...).
+  # cpu_secs is the primary quantity for any speed comparison; wall_secs
+  # is context only (see the comment above start_time for why).
+  cpu_secs = cpu_secs,
+  wall_secs = wall_secs,
 
   n_subjects = n_subjects
 )

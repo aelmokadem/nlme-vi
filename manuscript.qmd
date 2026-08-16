@@ -404,11 +404,33 @@ comparison uses $N=120$ subjects and 20 replicate simulated datasets,
 matching the scale used for the linear-tier simulation study above; each
 replicate is fit once by FOCEI, once by SAEM, and by variational
 inference at $K=1$ and $K=64$, all on the identical simulated dataset.
-Runtime is measured as process CPU time, not wall-clock time, for the
-variational inference fits, consistent with the timing methodology used
-throughout this work; process CPU time for the FOCEI and SAEM fits was
-not correctly captured in the current results, so a runtime comparison
-is not reported (see Limitations).
+Runtime is measured as process CPU time, not wall-clock time, for both
+the variational inference fits (Python's `time.process_time()`) and the
+FOCEI/SAEM fits (R's `proc.time()`, summing the user and system
+components), consistent throughout this work specifically because
+process CPU time is immune to operating-system sleep and largely immune
+to contention from other processes, unlike wall-clock time. Thread
+counts were not explicitly pinned to be identical between the PyTorch
+and R/BLAS processes; this is a limitation of the runtime comparison
+reported below (see Limitations), since incidental differences in
+parallelism could confound a small part of the observed speed
+difference.
+
+This runtime comparison is scoped deliberately to a single, simple,
+analytically tractable structural model, chosen specifically to allow a
+fair, matched comparison in which both sides evaluate the likelihood via
+a closed-form solution rather than numerical integration. It is not
+intended as the paper's primary evidence for variational inference's
+practical efficiency advantage, which is expected to be most pronounced
+for larger populations and structurally more complex models where FOCEI
+and SAEM's per-iteration cost scales unfavorably, an advantage already
+established in the literature at larger scale (@arruda2024amortized
+report roughly two orders of magnitude speedup on their tested models).
+The purpose of the comparison reported here is narrower: to verify that
+the $\Omega$-bias correction characterized throughout this work brings
+variational inference to FOCEI/SAEM-comparable accuracy without
+introducing a prohibitive runtime cost on a tractable model, not to make
+a general efficiency claim.
 
 ### Software and Computational Environment
 
@@ -641,10 +663,23 @@ $K=1$ overestimates it by 7.4%.
 at $K=1$ and $K=64$) against ground truth, $N=120$ subjects, 20
 replicates. {#tbl-baseline-comparison}
 
-A runtime comparison is not included: process CPU time was not correctly
-captured for the FOCEI and SAEM fits reported above (only variational
-inference's runtime is currently populated in the underlying data); see
-Limitations.
+[PENDING UPDATE: the runtime figures previously reported here were
+measured under an earlier version of the FOCEI/SAEM baseline pipeline
+that evaluated the model via numerical ODE integration rather than the
+closed-form analytic solution variational inference uses, an unfair
+comparison inflating FOCEI/SAEM runtime for reasons unrelated to
+FOCEI/SAEM as estimation algorithms (confirmed directly: a single-fit
+spot check after switching the baseline pipeline to nlmixr2's built-in
+analytic solver showed FOCEI and SAEM runtime dropping by roughly an
+order of magnitude, with parameter estimates essentially unchanged, as
+expected for a fix that only affects likelihood-evaluation cost, not the
+underlying statistical model). This paragraph will be replaced with the
+corrected runtime figures, framed per the scoping paragraph in Methods
+above: this is not the paper's primary efficiency claim, which rests on
+prior literature at larger model scale, but a check that the accuracy
+correction above does not introduce a prohibitive runtime cost on a
+tractable model. Thread counts were not explicitly pinned to be equal
+between the PyTorch and R/BLAS processes; see Limitations.]
 
 ## Discussion
 
@@ -739,36 +774,42 @@ trajectory shapes vary substantially more (spanning saturated,
 transitional, and first-order elimination regimes) than the comparatively
 uniform trajectory shapes of the linear tier, but this is not yet tested.
 
-**Limitations.** The accuracy side of the FOCEI/SAEM comparison (see
-Results) is now complete and directly supports this work's central claim
-on the linear tier. Two gaps remain. First, the runtime side of that
-comparison is not yet reported: process CPU time was not correctly
-captured for the FOCEI and SAEM fits in the current baseline pipeline, so
-the practical question of how much faster variational inference is
-cannot yet be answered quantitatively for this model, only by comparison
-to the general literature's reported comparisons for other models (for
-example, @arruda2024amortized report roughly two orders of magnitude
-speedup on their tested models). This is expected to be resolved by
-correcting the runtime measurement in the baseline pipeline. Second, the
-baseline comparison currently covers only the linear tier; extending it
-to the Michaelis-Menten nonlinear tier would substantiate the
-identifiability claim made above with a direct comparison rather than an
-appeal to general pharmacometric practice. Beyond the baseline
-comparison, this work tests a single linear structural model class and a
-single nonlinear structural model class; whether the identified biases
-and corrections generalize to structurally more complex models (multiple
-compartments, covariate effects, time-varying dosing) is not directly
-tested here. The residual, smaller miscalibration remaining in the
-amortized-posterior likelihood-ratio test calibration after the
-boundary-mass correction (see Results) also remains unexplained; a
-follow-up analysis testing whether divergence in the two nested models'
-residual-error estimates explains this residual found a real correlation
-but could not establish it as a mechanism independent of the
-already-understood boundary-mass effect, given that the residual-error
+**Limitations.** The FOCEI/SAEM accuracy comparison (see Results) is
+complete and directly supports this work's central claim on the linear
+tier. The runtime comparison is still pending at the time of writing: an
+early version inadvertently evaluated the FOCEI/SAEM baseline via
+numerical ODE integration rather than the closed-form analytic solution
+variational inference uses for this same linear model, an unfair
+comparison that was caught and corrected (see Results), and the
+corrected figures are expected imminently. Once available, that
+comparison will still not control for thread-count parallelism between
+the PyTorch and R/BLAS processes; a difference in incidental hardware
+parallelism, not algorithmic efficiency, could account for some part of
+any observed speed difference. Repeating the comparison with thread
+counts explicitly matched on both sides would strengthen the result
+further, but as scoped in Methods, this comparison is not intended as
+the paper's primary efficiency claim regardless of its outcome. A
+second gap: the baseline comparison currently covers only the linear
+tier; extending it to the Michaelis-Menten nonlinear tier would
+substantiate the identifiability claim made above with a direct
+comparison rather than an appeal to general pharmacometric practice.
+Beyond the baseline comparison, this work tests a single linear
+structural model class and a single nonlinear structural model class;
+whether the identified biases and corrections generalize to structurally
+more complex models (multiple compartments, covariate effects,
+time-varying dosing) is not directly tested here. The residual, smaller
+miscalibration remaining in the amortized-posterior likelihood-ratio test
+calibration after the boundary-mass correction (see Results) also
+remains unexplained; a follow-up analysis testing whether divergence in
+the two nested models' residual-error estimates explains this residual
+found a real correlation but could not establish it as a mechanism
+independent of the already-understood boundary-mass effect, given that
+the residual-error
 parameter appears directly inside the likelihood by construction.
 
-**Future work.** Beyond correcting the runtime measurement in the
-FOCEI/SAEM baseline comparison and extending it to the nonlinear tier,
+**Future work.** Beyond repeating the runtime comparison with thread
+counts explicitly matched between the PyTorch and R/BLAS processes and
+extending the FOCEI/SAEM baseline comparison to the nonlinear tier,
 concrete directions include validating the decoupled-base-distribution
 flow architecture described above at production scale, extending the
 nonlinear tier to structurally harder models such as target-mediated drug
