@@ -208,7 +208,7 @@ publication_tables() {
     # sources are skipped, not an error.
     python publication/make_tables.py \
         --phase0-csv outputs/phase0_results.csv \
-        --phase1-csv outputs/phase1_results.csv \
+        --phase1-csv outputs/phase1_linear_combined.csv \
         --nonlinear-csv outputs/phase1_nonlinear_results.csv \
         --theoph-csv outputs/phase2_realdata_theoph.csv \
         --warfarin-csv outputs/phase2_realdata_warfarin.csv \
@@ -222,7 +222,7 @@ publication_tables() {
 publication_figures() {
     python publication/make_figures.py \
         --phase0-csv outputs/phase0_results.csv \
-        --phase1-csv outputs/phase1_results.csv \
+        --phase1-csv outputs/phase1_linear_combined.csv \
         --nonlinear-csv outputs/phase1_nonlinear_results.csv \
         --theoph-csv outputs/phase2_realdata_theoph.csv \
         --warfarin-csv outputs/phase2_realdata_warfarin.csv \
