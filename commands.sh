@@ -191,14 +191,32 @@ baselines_real() {
 }
 
 baselines_r_direct() {
-    # Bypasses the Python orchestrator entirely -- useful for isolating R
-    # issues without the Python subprocess layer in the way.
     local csv="${1:-outputs/phase2_baselines/rep0_data.csv}"
+
     if [[ ! -f "$csv" ]]; then
         echo "Missing $csv -- run baselines_dryrun first to generate it."
         return 1
     fi
-    Rscript phase2/baseline_nlmixr2.R "$csv" /tmp/test_foce.csv foce
+
+    mkdir -p outputs/phase2_baselines
+
+    echo "Running FOCEI..."
+    Rscript phase2/baseline_nlmixr2.R \
+        "$csv" \
+        outputs/phase2_baselines/rep0_foce.csv \
+        foce
+
+    echo ""
+    echo "Running SAEM..."
+    Rscript phase2/baseline_nlmixr2.R \
+        "$csv" \
+        outputs/phase2_baselines/rep0_saem.csv \
+        saem
+
+    echo ""
+    echo "Baseline fits complete:"
+    echo "  outputs/phase2_baselines/rep0_foce.csv"
+    echo "  outputs/phase2_baselines/rep0_saem.csv"
 }
 
 # ===================================================== Publication
