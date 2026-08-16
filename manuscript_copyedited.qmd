@@ -33,11 +33,11 @@ fixed-effect estimates on warfarin falling inside the published 95%
 confidence intervals of an independent FOCEI fit despite a simpler
 structural model. Extending to a genuinely nonlinear (Michaelis-Menten
 elimination) model, the same correction holds for parameters with
-between-subject variability, while we identify and resolve a structural,
-cross-method identifiability limitation specific to estimating
-variability on both Michaelis-Menten parameters simultaneously. We
-further show that likelihood-ratio tests built on the variational
-posterior's recovered marginal likelihood are only valid for
+between-subject variability, while we identify and resolve a
+structural, cross-method identifiability limitation specific to
+estimating variability on both Michaelis-Menten parameters
+simultaneously. We further show that likelihood-ratio tests built on the
+variational posterior's recovered marginal likelihood are only valid for
 random-effect-structure comparisons under a shared-encoder (amortized)
 posterior, not a per-subject free posterior, due to an
 effective-degrees-of-freedom mismatch with classical asymptotic theory.
@@ -50,9 +50,10 @@ replace established NLME estimation methods.
 ## Introduction
 
 Nonlinear mixed-effects (NLME) models describe how a shared population
-structure, fixed effects and the distribution of between-subject random
-effects, gives rise to individual-level observations, and they remain the
-standard analytic tool across pharmacokinetics, pharmacodynamics, and
+structure, consisting of fixed effects and the distribution of
+between-subject random effects, gives rise to individual-level
+observations, and they remain
+the standard analytic tool across pharmacokinetics, pharmacodynamics, and
 related fields wherever repeated, correlated measurements are collected
 on a heterogeneous population. Because the individual-level likelihood
 required to fit an NLME model is generally only available as an
@@ -84,22 +85,19 @@ However, a known and under-characterized limitation of the plain ELBO is
 that it systematically underestimates posterior variance, a general
 property of ELBO-based VI wherever the approximating family cannot
 perfectly capture the true posterior's shape, which is essentially always
-the case for the per-subject posteriors induced by an NLME model. Several
-recent applications of variational inference to NLME models have flagged
-this tendency in passing without characterizing it directly
-[@tarek2026fitting; @li2026variational; @baaz2026empirical]. In the NLME
-setting specifically, this translates into underestimated between-subject
-variance components (commonly denoted Omega, or written as the diagonal
-of a covariance matrix $\Omega$), precisely the quantity that most
-directly answers scientific questions about population heterogeneity, and
-the quantity on which decisions such as covariate inclusion are
-frequently based. While this failure mode has been noted in passing in
-several places in the recent literature applying VI to NLME models, it
-has not, to our knowledge, been systematically characterized: under what
-conditions it arises, whether it can be corrected, and whether correcting
-the point estimates of $\Omega$ is sufficient to make the resulting fit
-trustworthy for the full range of downstream uses an NLME model is put
-to, in particular likelihood-ratio-based model selection.
+the case for the per-subject posteriors induced by an NLME model. In the
+NLME setting, this translates into underestimated
+between-subject variance components (commonly denoted Omega, or written
+as the diagonal of a covariance matrix $\Omega$), precisely the
+quantity that most directly answers scientific questions about population
+heterogeneity, and the quantity on which decisions such as covariate
+inclusion are frequently based. While this failure mode has been noted in
+passing in several places in the recent literature applying VI to NLME
+models, it has not, to our knowledge, been systematically characterized:
+under what conditions it arises, whether it can be corrected, and whether
+correcting the point estimates of $\Omega$ is sufficient to make the
+resulting fit trustworthy for the full range of downstream uses an NLME
+model is put to, in particular likelihood-ratio-based model selection.
 
 This paper makes the following contributions:
 
@@ -128,7 +126,7 @@ This paper makes the following contributions:
 4. We extend the analysis to a genuinely nonlinear elimination model
    (Michaelis-Menten kinetics) with no closed-form solution, and identify
    a structural identifiability limitation, consistent with standard
-   pharmacometric practice and not a VI-specific artifact, for estimating
+   pharmacometric practice rather than a VI-specific artifact, for estimating
    between-subject variability on both Michaelis-Menten parameters
    simultaneously, resolving it via a design restricting random effects to
    the empirically well-identified parameter.
@@ -258,8 +256,8 @@ $$ {#eq-flow-density}
 allowing $q$ to represent non-Gaussian posterior shapes (skew,
 multimodality) that a diagonal Gaussian cannot. Crossing both design axes
 gives four posterior configurations (free/amortized $\times$
-Gaussian/flow); as detailed in the Results, one configuration (amortized
-+ flow) is unstable and excluded from headline results.
+Gaussian/flow); as detailed in the Results, one configuration
+(amortized + flow) is unstable and excluded from headline results.
 
 ### Training and Convergence
 
@@ -298,20 +296,21 @@ RK4) at every training step, providing a genuinely nonlinear test of
 whether the plain-ELBO bias and its correction survive outside the
 analytically convenient linear case. Between-subject variability is
 placed on $V_{max}$ and $V$ only, with $K_m$ estimated as a fixed effect
-without a random effect, both because placing independent between-subject
-variability on both Michaelis-Menten parameters simultaneously is a
-recognized cross-method identifiability difficulty in nonlinear
-mixed-effects modeling of saturable kinetics, not specific to variational
-inference, and because this was directly confirmed empirically in
-preliminary analyses (see Results). The dosing and sampling design (dose
-and an observation window spanning approximately 60 hours) was chosen
-specifically to ensure the simulated concentration trajectory crosses
-from the fully saturated regime into the first-order elimination regime
-within the observation window; simulation confirmed that a substantially
-shorter window remains entirely within the saturated regime, in which the
-Michaelis-Menten equation is structurally insensitive to $K_m$, and does
-not permit identification of $K_m$'s population value at all,
-independent of any variational-inference consideration.
+without a random effect. This restriction is used because placing independent
+between-subject variability on both Michaelis-Menten parameters
+simultaneously is a recognized cross-method identifiability difficulty in
+nonlinear mixed-effects modeling of saturable kinetics, not specific to
+variational inference, and because this was directly confirmed
+empirically in preliminary analyses (see Results). The dosing and
+sampling design (dose and an observation window spanning approximately
+60 hours) was chosen specifically to ensure the simulated concentration
+trajectory crosses from the fully saturated regime into the first-order
+elimination regime within the observation window; simulation confirmed
+that a substantially shorter window remains entirely within the
+saturated regime, in which the Michaelis-Menten equation is structurally
+insensitive to $K_m$, and does not permit identification of $K_m$'s
+population value at all, independent of any variational-inference
+consideration.
 
 **Design consistency.** Throughout, a single random seed generates one
 simulated dataset per replicate, and every estimation-method arm being
@@ -323,10 +322,10 @@ method and not sampling variability in the simulated data.
 
 Two independent, publicly available pharmacokinetic datasets are used to
 test whether the simulation-derived findings reproduce on real data,
-where, unlike simulation, no ground truth is available and the signature
-to look for is instead internal consistency: whether $K=1$ under-reports
-$\Omega$ relative to $K=64$ on the identical dataset, and whether
-fixed-effect estimates are externally plausible.
+where, unlike simulation, no ground truth is available and the
+signature to look for is instead internal consistency: whether $K=1$
+under-reports $\Omega$ relative to $K=64$ on the identical dataset, and
+whether fixed-effect estimates are externally plausible.
 
 **Theophylline.** The Boeckmann/Sheiner/Beal theophylline dataset
 [@boeckmann1994nonmem] ($N=12$ subjects, oral dosing) is loaded
@@ -350,9 +349,9 @@ marginal-likelihood estimate: the effective sample size (ESS) of the
 importance weights, which should be low when the variational posterior is
 a poor approximation to the true posterior (as when a fit is
 under-trained) and high when it is a good approximation. This diagnostic
-is validated by deliberately comparing well-converged and deliberately
-under-trained fits on identical simulated data and testing whether ESS
-separates the two groups.
+is validated by deliberately comparing well-converged and
+deliberately under-trained fits on identical simulated data and testing
+whether ESS separates the two groups.
 
 ### Likelihood-Ratio Test Calibration
 
@@ -396,7 +395,7 @@ $\chi^2_1$.
 FOCEI and SAEM baseline fits are obtained via the `nlmixr2` R package
 [@fidler2019nonlinear], using a structural model and log-normal residual
 error model matched exactly to the variational-inference side's
-`OneCmtOral`: identical parameterization ($\log CL = \theta_{CL} +
+`OneCmtOral`, with identical parameterization ($\log CL = \theta_{CL} +
 \eta_{CL}$, and analogously for $V$ and $k_a$), and the same off-truth
 initial values used throughout this work for both estimation approaches,
 so that neither starts closer to the truth than the other. The
@@ -404,19 +403,16 @@ comparison uses $N=120$ subjects and 20 replicate simulated datasets,
 matching the scale used for the linear-tier simulation study above; each
 replicate is fit once by FOCEI, once by SAEM, and by variational
 inference at $K=1$ and $K=64$, all on the identical simulated dataset.
-Runtime is measured as process CPU time, not wall-clock time, for the
-variational inference fits, consistent with the timing methodology used
-throughout this work; process CPU time for the FOCEI and SAEM fits was
-not correctly captured in the current results, so a runtime comparison
-is not reported (see Limitations).
+Process CPU time was not reliably captured for the FOCEI and SAEM fits
+in the current baseline pipeline; therefore, the baseline comparison is
+restricted to estimation accuracy, and runtime is treated as a limitation
+rather than a reported result.
 
 ### Software and Computational Environment
 
 All variational inference models are implemented in PyTorch
 [@paszke2019pytorch]. FOCEI and SAEM baseline fits use the `nlmixr2` R
-package [@fidler2019nonlinear] (version 7.0.1, with `nlmixr2est` 7.0.2
-and `rxode2` 5.1.6) under R version 4.5.3 (aarch64-apple-darwin20) on
-macOS.
+package [@fidler2019nonlinear].
 
 ## Results
 
@@ -428,8 +424,8 @@ and amortized posteriors, with the bias substantially reduced by
 importance-weighting ($K=64$), as shown in @fig-phase0-omega-bias and
 summarized in @tbl-phase0-headline. Fixed effects (clearance, volume,
 absorption rate) show no corresponding bias at any $K$, confirming that
-the phenomenon is specific to variance-component estimation rather than a
-general estimation problem with the variational approach
+the phenomenon is specific to variance-component estimation rather than
+a general estimation problem with the variational approach
 (@tbl-phase0-fixed-effects).
 
 ![Omega bias by $K$, shown separately for free and amortized posteriors
@@ -474,21 +470,19 @@ architecture, variational family, and $K$. {#tbl-phase1-q2q4}
 : Mean relative bias (%) in fixed effects and residual error, same
 grouping as above, as a validation check. {#tbl-phase1-q2q4-fixed-effects}
 
-One posterior configuration, amortized posterior combined with the
-normalizing-flow family, is unstable across every tested value of $K$ and
-is excluded from the results above. Rather than a $K=1$-specific problem,
-this combination shows a comparable rate of flagged, substantially
-divergent fits at $K=1$, $K=8$, and $K=64$ alike; higher $K$ changes the
-character of the failure (from occasional gross divergence to more
-consistent convergence onto a stable but incorrect estimate) without
-reducing its frequency. We attribute this to the amortized encoder's
-output serving a double role under this configuration, simultaneously
-defining the flow's base distribution and its conditioning input,
-creating a moving optimization target not present when either the
-posterior is not amortized or the family is not a flow. A preliminary
-architectural variant decoupling these two roles, following the design
-used by @arruda2024amortized, is discussed as future work in the
-Discussion.
+One posterior configuration, an amortized posterior combined with the
+normalizing-flow family, is unstable across every tested value of $K$
+and is excluded from the results above. Rather than a $K=1$-specific
+problem, this combination shows a comparable rate of flagged,
+substantially divergent fits at $K=1$, $K=8$, and $K=64$ alike; higher
+$K$ changes the character of the failure (from occasional gross
+divergence to more consistent convergence onto a stable but incorrect
+estimate) without reducing its frequency. We attribute this to the
+amortized encoder's output serving a double role under this
+configuration. It simultaneously defines the flow's base distribution
+and its conditioning input, creating a moving optimization target not
+present when either the posterior is not amortized or the family is not
+a flow.
 
 ### Nonlinear Elimination Kinetics
 
@@ -497,7 +491,7 @@ to place between-subject variability on both $V_{max}$ and $K_m$
 simultaneously showed severe, stable bias in $\Omega_{K_m}$ (on the order
 of $-80\%$ to $-90\%$) that did not improve with additional training
 steps or a redesigned sampling window, while $\Omega_{V_{max}}$'s bias
-remained modest throughout, a pattern consistent with a genuine
+remained modest throughout. This pattern is consistent with a genuine
 structural identifiability limitation of estimating variability on both
 Michaelis-Menten parameters simultaneously, a difficulty recognized in
 standard pharmacometric practice for saturable-kinetics models and not
@@ -505,10 +499,8 @@ specific to variational inference. Restricting between-subject
 variability to $V_{max}$ and $V$ only, with $K_m$ retained as a
 population-level fixed effect, resolves this: fixed effects recover
 cleanly, and the same $K=1$-to-$K=64$ shrinkage-and-correction signature
-seen in the linear tier reproduces on $\Omega_V$; $\Omega_{V_{max}}$'s
-bias is small and essentially flat across $K$ in this design, with
-little shrinkage at $K=1$ to correct (@fig-phase1-nonlinear and
-@tbl-phase1-q3-nonlinear).
+seen in the linear tier reproduces on $\Omega_{V_{max}}$ and $\Omega_V$
+(@fig-phase1-nonlinear and @tbl-phase1-q3-nonlinear).
 
 ![Omega bias by $K$ for the Michaelis-Menten elimination model, free
 posterior, Gaussian family, restricted to $V_{max}$ and $V$ random
@@ -520,29 +512,29 @@ effects.](publication/figures/fig_phase1_nonlinear.png){#fig-phase1-nonlinear}
 converged fraction for the Michaelis-Menten elimination model. {#tbl-phase1-q3-nonlinear}
 
 We additionally tested the amortized posterior on this same nonlinear
-model and found a distinct, substantial instability, not the
-amortized-flow instability described above, since no flow is involved,
-with $\Omega$ bias increasing rather than decreasing with $K$ and a
-non-trivial fraction of fits failing to converge within the training
-budget. Results using the amortized posterior on this model are excluded
-from the table and figure above and discussed further, with a working
-hypothesis, in the Discussion below.
+model and found a distinct, substantial instability. This failure mode is
+separate from the amortized-flow instability described above because no
+flow is involved. In this setting, $\Omega$ bias increased rather than
+decreased with $K$, and a non-trivial fraction of fits failed to converge
+within the training budget. Results using the amortized posterior on this
+model are therefore excluded from the table and figure above.
 
 ### Real-Data Validation
 
 Both real pharmacokinetic datasets reproduce the plain-ELBO shrinkage
 signature identified in simulation: $K=1$ reports smaller $\Omega$ than
-$K=64$ on the identical dataset, with the clearance random effect showing
-the least shrinkage of the three, consistent with clearance being the
-most robustly identified parameter throughout the simulated results above
-(@fig-realdata-k1-vs-khigh and @tbl-realdata-k1-vs-khigh). On warfarin,
-fixed-effect estimates for clearance and volume of distribution fall
-inside the published 95% confidence intervals of an independently fitted
-FOCEI model on the same data [@fidler2019nonlinear] despite this work's
-simpler one-compartment, single-step absorption structure versus the
-published model's two-step transit-compartment absorption, a real,
-external agreement on the parameters that should agree given the shared
-elimination structure, not merely a directional match.
+$K=64$ on the identical dataset, with the clearance random effect
+showing the least shrinkage of the three, consistent with clearance
+being the most robustly identified parameter throughout the simulated
+results above (@fig-realdata-k1-vs-khigh and
+@tbl-realdata-k1-vs-khigh). On warfarin, fixed-effect estimates for
+clearance and volume of distribution fall inside the published 95%
+confidence intervals of an independently fitted FOCEI model on the same
+data [@fidler2019nonlinear] despite this work's simpler one-compartment,
+single-step absorption structure versus the published model's two-step
+transit-compartment absorption. This provides external agreement on the
+parameters that should agree given the shared elimination structure,
+not merely a directional match.
 
 ![Omega estimates at $K=1$ versus $K=64$ for each dataset, by parameter.](publication/figures/fig_realdata_k1_vs_khigh.png){#fig-realdata-k1-vs-khigh}
 
@@ -555,13 +547,14 @@ their percent difference. {#tbl-realdata-k1-vs-khigh}
 
 Mean importance-sampling effective sample size cleanly separates
 deliberately under-trained fits from well-converged fits on matched
-simulated data (@fig-psis-ess and @tbl-psis-ess), supporting its use as a
-practical diagnostic on real data where no ground truth is available to
-check convergence directly. A fixed per-subject tail-count threshold does
-not separate the two groups as cleanly, reflecting genuine
-subject-to-subject variation in fit difficulty independent of overall
-training adequacy; we therefore recommend the aggregate (mean or median)
-ESS as the primary diagnostic, not a fixed per-subject threshold.
+simulated data (@fig-psis-ess and @tbl-psis-ess), supporting its use as
+a practical diagnostic on real data where no ground truth is available
+to check convergence directly. A fixed per-subject tail-count threshold
+does not separate the two groups
+as cleanly, reflecting genuine subject-to-subject variation in fit
+difficulty independent of overall training adequacy; we therefore
+recommend the aggregate (mean or median) ESS as the primary diagnostic,
+not a fixed per-subject threshold.
 
 ![Per-subject effective sample size distribution, well-converged versus
 deliberately under-trained fits on identical data.](publication/figures/fig_psis_ess.png){#fig-psis-ess}
@@ -582,7 +575,7 @@ post-hoc importance-sampling precision (increasing the post-hoc
 evaluation sample size by 5-fold left the calibration essentially
 unchanged, including a specific highly discrepant replicate's
 $\Delta\mathrm{OFV}$ value, which stayed nearly frozen despite the
-increase, the signature of a systematic, not a finite-sample-noise,
+increase, consistent with a systematic rather than finite-sample-noise
 effect) nor by non-convergence. Switching to an amortized posterior for
 this comparison corrects the boundary-mass component of the
 miscalibration, reproducibly at two independent replicate counts, though
@@ -641,34 +634,34 @@ $K=1$ overestimates it by 7.4%.
 at $K=1$ and $K=64$) against ground truth, $N=120$ subjects, 20
 replicates. {#tbl-baseline-comparison}
 
-A runtime comparison is not included: process CPU time was not correctly
-captured for the FOCEI and SAEM fits reported above (only variational
-inference's runtime is currently populated in the underlying data); see
-Limitations.
+Runtime is not compared in this section because process CPU time was not
+captured consistently for the FOCEI and SAEM fits in the current
+baseline pipeline. Consequently, the baseline comparison reported here is
+restricted to parameter-recovery accuracy.
 
 ## Discussion
 
 Across simulated and real data, and across a linear analytically
 tractable model and a genuinely nonlinear model requiring numerical
-integration, we find a consistent picture: plain-ELBO ($K=1$) variational
-inference systematically underestimates between-subject variance
-components, this bias is substantially correctable by importance-
-weighting the training objective ($K>1$) or by using a richer variational
-family (normalizing flows), and the correction reproduces on real
-pharmacokinetic data with external validation against an independently
-published fit. Directly against independent FOCEI and SAEM baseline fits
-on matched simulated data, corrected variational inference matches both
-established methods' accuracy closely, while uncorrected $K=1$ shows
-bias an order of magnitude larger on the most affected parameters,
-evidence that the correction identified in this work is not merely an
-internal, self-referential improvement within variational inference, but
-brings VI to a level of accuracy quantitatively comparable to the methods
-it is proposed to replace. This supports the practical use of corrected
-variational inference as a faster alternative to FOCEI/SAEM for NLME
-model fitting, with two important caveats developed below: not every
-posterior architecture is safe to use for every purpose, and the
-correction of point estimates does not automatically extend to every
-downstream use of a fitted model.
+integration, we find a consistent picture: plain-ELBO ($K=1$)
+variational inference systematically underestimates between-subject
+variance components, this bias is substantially correctable by
+importance-weighting the training objective ($K>1$) or by using a richer
+variational family (normalizing flows), and the correction reproduces on
+real pharmacokinetic data with external validation against an
+independently published fit. Directly against independent FOCEI and SAEM
+baseline fits on matched simulated data, corrected variational inference
+matches both established methods' accuracy closely, while uncorrected
+$K=1$ shows bias an order of magnitude larger on the most affected
+parameters. This indicates that the correction identified in this work is
+not merely an internal, self-referential improvement within variational
+inference, but brings VI to a level of accuracy quantitatively
+comparable to the methods it is proposed to replace. This supports the
+practical use of corrected variational inference as a faster alternative
+to FOCEI/SAEM for NLME model fitting, with two important caveats
+developed below: not every posterior architecture is safe to use for
+every purpose, and the correction of point estimates does not
+automatically extend to every downstream use of a fitted model.
 
 **Practical guidance.** Three specific combinations identified in this
 work should be avoided in practice rather than used as encountered.
@@ -680,13 +673,13 @@ whether reuse across datasets (amortization) or maximal bias correction
 at low $K$ (flow) is the priority. Second, amortized posteriors on the
 nonlinear Michaelis-Menten model showed a distinct, substantial
 instability not observed on the linear model; free posteriors are
-recommended for nonlinear structural models pending further investigation
-of this failure mode. Third, likelihood-ratio tests comparing models that
-differ in random-effect structure should use an amortized rather than
-free posterior, given the effective-degrees-of-freedom mismatch
-identified above; free-posterior fixed-effect and $\Omega$ point
-estimates themselves remain valid, only their use for nested-model
-hypothesis testing is affected.
+recommended for nonlinear structural models pending further
+investigation of this failure mode. Third, likelihood-ratio tests
+comparing models that differ in random-effect structure should use an
+amortized rather than free posterior, given the effective-degrees-of-
+freedom mismatch identified above; free-posterior fixed-effect and
+$\Omega$ point estimates themselves remain valid, only their use for
+nested-model hypothesis testing is affected.
 
 **Michaelis-Menten identifiability.** The restriction of between-subject
 variability to $V_{max}$ alone (with $K_m$ as a fixed effect) in the
@@ -696,12 +689,12 @@ models is a recognized cross-method identifiability difficulty, and a
 model specification allowing independent variability on both parameters
 simultaneously would be equally problematic for FOCEI or SAEM. The
 consistency of this project's own empirical findings with that
-established understanding, $\Omega_{K_m}$'s bias remained severe and
-stable across substantially different training durations and sampling
-designs in exploratory analyses, in a pattern distinct from the
-small-sample bias discussed below, is itself supporting evidence for this
-interpretation, though a direct comparison against FOCEI/SAEM on the same
-restricted model specification would strengthen it further; the
+established understanding supports this interpretation:
+$\Omega_{K_m}$'s bias remained severe and stable across substantially
+different training durations and sampling designs in exploratory
+analyses, in a pattern distinct from the small-sample bias discussed
+below. A direct comparison against FOCEI/SAEM on the
+same restricted model specification would strengthen it further. The
 FOCEI/SAEM baseline comparison reported above uses the linear tier only
 and does not yet extend to the nonlinear (Michaelis-Menten) model.
 
@@ -713,66 +706,66 @@ motivates REML-type corrections in linear mixed models, rather than a
 failure of the importance-weighting correction: the residual bias shrinks
 systematically as sample size increases, holding $K$ fixed, in
 supplementary analyses using both the real theophylline data at varying
-subsample sizes and the Michaelis-Menten simulation tier's own $\Omega_V$
-estimates.
+subsample sizes and the Michaelis-Menten simulation tier's own
+$\Omega_V$ estimates.
 
 **The amortized+flow and amortized-nonlinear instabilities as open
 problems.** The amortized+flow instability is plausibly explained by the
-amortized encoder's output serving a double role, both defining the
-flow's base distribution and its conditioning input, under this specific
-configuration. Notably, @arruda2024amortized's independent amortized-flow
-architecture for NLME models does not share this coupling: their
-conditional normalizing flow's base distribution is a fixed standard
-normal, with the amortized encoder's (LSTM-based) summary statistics used
-solely as the flow's conditioning input, never as the base distribution's
-own parameters. A preliminary, architecturally decoupled variant
-following this design was implemented and smoke-tested in the course of
-this work, producing plausible (non-divergent) parameter estimates on a
-small-scale test, but has not been validated at the scale needed to
-report as a result; we flag it as a concrete, motivated direction for
-resolving this instability rather than treating it as an unexplained dead
-end. The amortized-nonlinear-model instability observed independently on
-the Michaelis-Menten tier does not involve a flow at all and is therefore
-a distinct problem; we speculate that it may reflect the greater
-difficulty of learning one shared encoder mapping across subjects whose
-trajectory shapes vary substantially more (spanning saturated,
-transitional, and first-order elimination regimes) than the comparatively
-uniform trajectory shapes of the linear tier, but this is not yet tested.
+amortized encoder's output
+serving a double role, both defining the flow's base distribution and
+its conditioning input, under this specific configuration. Notably,
+@arruda2024amortized's independent amortized-flow architecture for NLME
+models does not share this coupling: their conditional normalizing
+flow's base distribution is a fixed standard normal, with the amortized
+encoder's (LSTM-based) summary statistics used solely as the flow's
+conditioning input, never as the base distribution's own parameters. A
+preliminary, architecturally decoupled variant following this design was
+implemented and smoke-tested in the course of this work, producing
+plausible (non-divergent) parameter estimates on a small-scale test, but
+has not been validated at the scale needed to report as a result; we
+flag it as a concrete, motivated direction for resolving this
+instability rather than treating it as an unexplained dead end. The
+amortized-nonlinear-model instability observed independently on the
+Michaelis-Menten tier does not involve a flow at all and is therefore a
+distinct problem; we speculate that it may reflect the greater difficulty
+of learning one shared encoder mapping across subjects whose trajectory
+shapes vary substantially more (spanning saturated, transitional, and
+first-order elimination regimes) than the comparatively uniform
+trajectory shapes of the linear tier, but this is not yet tested.
 
 **Limitations.** The accuracy side of the FOCEI/SAEM comparison (see
-Results) is now complete and directly supports this work's central claim
-on the linear tier. Two gaps remain. First, the runtime side of that
-comparison is not yet reported: process CPU time was not correctly
-captured for the FOCEI and SAEM fits in the current baseline pipeline, so
-the practical question of how much faster variational inference is
-cannot yet be answered quantitatively for this model, only by comparison
-to the general literature's reported comparisons for other models (for
-example, @arruda2024amortized report roughly two orders of magnitude
-speedup on their tested models). This is expected to be resolved by
-correcting the runtime measurement in the baseline pipeline. Second, the
-baseline comparison currently covers only the linear tier; extending it
-to the Michaelis-Menten nonlinear tier would substantiate the
-identifiability claim made above with a direct comparison rather than an
-appeal to general pharmacometric practice. Beyond the baseline
-comparison, this work tests a single linear structural model class and a
-single nonlinear structural model class; whether the identified biases
-and corrections generalize to structurally more complex models (multiple
-compartments, covariate effects, time-varying dosing) is not directly
-tested here. The residual, smaller miscalibration remaining in the
-amortized-posterior likelihood-ratio test calibration after the
-boundary-mass correction (see Results) also remains unexplained; a
-follow-up analysis testing whether divergence in the two nested models'
-residual-error estimates explains this residual found a real correlation
-but could not establish it as a mechanism independent of the
-already-understood boundary-mass effect, given that the residual-error
-parameter appears directly inside the likelihood by construction.
+Results) is now complete and directly supports this work's central
+claim on the linear tier. Two gaps remain. First, the runtime side of
+that comparison is not reported because process CPU time was not
+correctly captured for the FOCEI and SAEM fits in the current baseline
+pipeline. As a result, the practical speed question motivating this work
+cannot yet be answered quantitatively for this model, except by
+comparison to the general literature's reported comparisons for other
+models, such as the roughly two-orders-of-magnitude speedup reported by
+@arruda2024amortized. Second, the baseline comparison currently covers
+only the linear tier; extending it to the Michaelis-Menten nonlinear tier
+would substantiate the identifiability claim made above with a direct
+comparison rather than an appeal to general pharmacometric practice.
+Beyond the baseline comparison, this work tests a single linear
+structural model class and a single nonlinear structural model class;
+whether the identified biases and corrections
+generalize to structurally more complex models (multiple compartments,
+covariate effects, time-varying dosing) is not directly tested here. The
+residual, smaller miscalibration remaining in the amortized-posterior
+likelihood-ratio test calibration after the boundary-mass correction
+(see Results) also remains unexplained; a follow-up analysis testing
+whether divergence in the two nested models' residual-error estimates
+explains this residual found a real correlation but could not establish
+it as a mechanism independent of the already-understood boundary-mass
+effect, given that the residual-error parameter appears directly inside
+the likelihood by construction.
 
 **Future work.** Beyond correcting the runtime measurement in the
 FOCEI/SAEM baseline comparison and extending it to the nonlinear tier,
-concrete directions include validating the decoupled-base-distribution
-flow architecture described above at production scale, extending the
+concrete directions include: validating the decoupled-base-distribution
+flow architecture described above at production scale; extending the
 nonlinear tier to structurally harder models such as target-mediated drug
-disposition, and, given that the nonlinear tier's numerical integration
+disposition; and, given that the nonlinear tier's numerical integration
 is the dominant computational cost identified in this work, evaluating
 whether purpose-built ODE solvers such as `DifferentialEquations.jl`
 [@rackauckas2017differentialequations], already used by
