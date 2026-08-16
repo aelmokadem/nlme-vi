@@ -185,7 +185,7 @@ echo "    if R/nlmixr2 isn't set up; see README Requirements)"
 BASELINE_CSV=""
 if command -v Rscript >/dev/null 2>&1 && Rscript -e 'library(nlmixr2)' >/dev/null 2>&1; then
     if run_step "Phase 2, FOCEI/SAEM baseline" \
-        uv run phase2/nlme_vi_phase2_baselines.py --subjects 120 --reps 5 --out "$OUT/phase2_baselines"; then
+        uv run phase2/nlme_vi_phase2_baselines.py --subjects 120 --reps 20 --out "$OUT/phase2_baselines"; then
         BASELINE_CSV="$OUT/phase2_baselines/phase2_baseline_comparison.csv"
     fi
 else
