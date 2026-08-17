@@ -1,0 +1,44 @@
+| Sampling design | Posterior | Variational family | Parameter type | Parameter | $K=1$ | $K=8$ | $K=64$ |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| dense | amortized | Gaussian | Structural fixed effect | $CL$ | 0.171 (2.81) | 0.237 (2.52) | -0.266 (2.55) |
+| dense | amortized | Gaussian | Structural fixed effect | $V$ | 0.755 (2.15) | -0.0364 (2.32) | -0.111 (2.24) |
+| dense | amortized | Gaussian | Structural fixed effect | $k_a$ | 1.34 (4.65) | 0.34 (4.44) | 0.864 (4.28) |
+| dense | amortized | Gaussian | Residual variability | $\sigma$ | 14.9 (8.2) | 0.789 (3.8) | -0.32 (3.81) |
+| dense | amortized | Gaussian | BSV SD | $\omega_{CL}$ | -2.14 (7.93) | -0.303 (6.76) | -0.102 (7.11) |
+| dense | amortized | Gaussian | BSV SD | $\omega_V$ | -25.6 (29.3) | -6 (12.1) | -1.86 (10.4) |
+| dense | amortized | Gaussian | BSV SD | $\omega_{k_a}$ | -17.3 (21.7) | -6.11 (9.63) | -2 (8.26) |
+| dense | free | Flow | Structural fixed effect | $CL$ | -0.535 (3.04) | -0.0883 (2.44) | -0.524 (2.48) |
+| dense | free | Flow | Structural fixed effect | $V$ | 0.311 (2.27) | 0.0194 (2.28) | -0.201 (2.5) |
+| dense | free | Flow | Structural fixed effect | $k_a$ | 0.149 (4.16) | 0.101 (4.06) | 0.904 (4.39) |
+| dense | free | Flow | Residual variability | $\sigma$ | 0.956 (3.31) | 0.114 (4.09) | -0.282 (3.8) |
+| dense | free | Flow | BSV SD | $\omega_{CL}$ | -0.0845 (7.15) | -0.0688 (7.35) | 0.165 (6.99) |
+| dense | free | Flow | BSV SD | $\omega_V$ | -1.02 (10.1) | -1.21 (10.3) | -0.58 (10.6) |
+| dense | free | Flow | BSV SD | $\omega_{k_a}$ | -3 (8.77) | -1.52 (8.44) | -0.791 (8.27) |
+| dense | free | Gaussian | Structural fixed effect | $CL$ | 0.133 (2.86) | 0.0176 (3.03) | -0.328 (2.9) |
+| dense | free | Gaussian | Structural fixed effect | $V$ | 0.823 (2.28) | -0.144 (2.35) | 0.209 (2.62) |
+| dense | free | Gaussian | Structural fixed effect | $k_a$ | 1.3 (4.63) | 0.0647 (4.59) | 0.243 (4.65) |
+| dense | free | Gaussian | Residual variability | $\sigma$ | 8.73 (4.37) | 0.39 (3.83) | -0.678 (3.64) |
+| dense | free | Gaussian | BSV SD | $\omega_{CL}$ | -1.04 (7.19) | 0.0186 (7.07) | -0.000424 (7.22) |
+| dense | free | Gaussian | BSV SD | $\omega_V$ | -19.6 (23.2) | -5.67 (12) | -1.73 (11.1) |
+| dense | free | Gaussian | BSV SD | $\omega_{k_a}$ | -16.9 (18) | -5.4 (9.62) | -0.961 (8.06) |
+| sparse | amortized | Gaussian | Structural fixed effect | $CL$ | 1.37 (3.2) | 0.36 (3.16) | 0.145 (3.07) |
+| sparse | amortized | Gaussian | Structural fixed effect | $V$ | -0.693 (3.07) | -0.0815 (3.19) | -0.128 (3.29) |
+| sparse | amortized | Gaussian | Structural fixed effect | $k_a$ | -2.64 (6.22) | -0.922 (6.22) | 0.471 (6.57) |
+| sparse | amortized | Gaussian | Residual variability | $\sigma$ | 38.1 (9.86) | 12.4 (9.11) | 1.49 (9.08) |
+| sparse | amortized | Gaussian | BSV SD | $\omega_{CL}$ | -1.19 (8.63) | -2.1 (8.15) | -1.1 (7.57) |
+| sparse | amortized | Gaussian | BSV SD | $\omega_V$ | -81.9 (12.8) | -17.9 (24.7) | -2.83 (12.4) |
+| sparse | amortized | Gaussian | BSV SD | $\omega_{k_a}$ | -14.8 (26.9) | -25.1 (33) | -5.57 (22) |
+| sparse | free | Flow | Structural fixed effect | $CL$ | 0.161 (2.76) | -0.0955 (2.49) | -0.0965 (2.68) |
+| sparse | free | Flow | Structural fixed effect | $V$ | 0.237 (3.06) | 0.294 (2.88) | 0.0393 (3.11) |
+| sparse | free | Flow | Structural fixed effect | $k_a$ | -0.443 (5.85) | 0.181 (6.36) | 0.684 (6.39) |
+| sparse | free | Flow | Residual variability | $\sigma$ | 6.58 (8.71) | 5.06 (8.67) | 1.45 (8.57) |
+| sparse | free | Flow | BSV SD | $\omega_{CL}$ | -1.16 (7.51) | -0.899 (7.54) | -0.671 (7.63) |
+| sparse | free | Flow | BSV SD | $\omega_V$ | -0.926 (11) | -1.7 (12) | -0.019 (10.5) |
+| sparse | free | Flow | BSV SD | $\omega_{k_a}$ | -19.3 (20) | -18.1 (26.1) | -5.21 (20.9) |
+| sparse | free | Gaussian | Structural fixed effect | $CL$ | 0.88 (2.68) | 0.735 (2.72) | -0.16 (2.84) |
+| sparse | free | Gaussian | Structural fixed effect | $V$ | -1.02 (3.03) | -0.168 (3.37) | -0.0371 (3.16) |
+| sparse | free | Gaussian | Structural fixed effect | $k_a$ | -2.75 (6.18) | -0.723 (6.39) | 0.802 (6.44) |
+| sparse | free | Gaussian | Residual variability | $\sigma$ | 33.3 (9.43) | 11.1 (9.61) | 1.02 (9) |
+| sparse | free | Gaussian | BSV SD | $\omega_{CL}$ | 0.234 (7.83) | -1.71 (8.32) | -0.419 (7.39) |
+| sparse | free | Gaussian | BSV SD | $\omega_V$ | -83 (15.6) | -17.4 (26.4) | -2.65 (11.2) |
+| sparse | free | Gaussian | BSV SD | $\omega_{k_a}$ | -5.38 (26.7) | -24.3 (33.2) | -5.12 (21.3) |

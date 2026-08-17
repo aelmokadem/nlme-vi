@@ -1,0 +1,16 @@
+| Posterior | Parameter type | Parameter | $K=1$ | $K=8$ | $K=64$ |
+| --- | --- | --- | --- | --- | --- |
+| amortized | Structural fixed effect | $CL$ | -0.484 (2.85) | -0.0361 (4.16) | -0.321 (3.49) |
+| amortized | Structural fixed effect | $V$ | -0.0532 (3.32) | -0.412 (2.99) | -0.241 (2.89) |
+| amortized | Structural fixed effect | $k_a$ | -3.94 (4.48) | -4.07 (3.17) | -2.92 (3.89) |
+| amortized | Residual variability | $\sigma$ | 15.3 (6.29) | 0.315 (2.85) | -1.21 (3.72) |
+| amortized | BSV SD | $\omega_{CL}$ | -0.712 (5.91) | 0.17 (7.51) | -0.329 (7.05) |
+| amortized | BSV SD | $\omega_V$ | -47.8 (39.6) | -16.5 (14.1) | -9.67 (13.4) |
+| amortized | BSV SD | $\omega_{k_a}$ | -13.5 (35.8) | -5.79 (16.9) | -2.61 (13.7) |
+| free | Structural fixed effect | $CL$ | 0.524 (3.45) | 1.28 (4.49) | 0.198 (3.44) |
+| free | Structural fixed effect | $V$ | -0.508 (3.69) | -0.249 (2.66) | -0.267 (2.71) |
+| free | Structural fixed effect | $k_a$ | -4.03 (5.3) | -3.2 (3.43) | -3.13 (3.15) |
+| free | Residual variability | $\sigma$ | 9.92 (3.71) | -0.099 (3.46) | -1.15 (3.49) |
+| free | BSV SD | $\omega_{CL}$ | -1.67 (6.34) | 0.248 (7.49) | 0.415 (7.43) |
+| free | BSV SD | $\omega_V$ | -47.4 (42) | -16.4 (13.6) | -9 (12.2) |
+| free | BSV SD | $\omega_{k_a}$ | -8.91 (33.7) | -6.75 (16.4) | -2.03 (12.1) |

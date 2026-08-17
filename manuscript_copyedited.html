@@ -121,7 +121,7 @@ window.Quarto = {
 <section id="introduction" class="level2">
 <h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
 <p>Nonlinear mixed-effects (NLME) models are widely used to characterize population-level trends and between-subject variability in pharmacokinetic, pharmacodynamic, and related longitudinal data. They are particularly useful when repeated observations are collected from heterogeneous populations. Fitting an NLME model requires integrating over subject-specific random effects, an integral that is generally unavailable in closed form <span class="citation" data-cites="pinheiro1994topics">(<a href="#ref-pinheiro1994topics" role="doc-biblioref">Pinheiro 1994</a>)</span>. Established estimation methods therefore rely on approximations. First-order conditional estimation with interaction (FOCEI) <span class="citation" data-cites="beal1980nonmem wang2008derivation">(<a href="#ref-beal1980nonmem" role="doc-biblioref">Beal and Sheiner 1980</a>; <a href="#ref-wang2008derivation" role="doc-biblioref">Wang 2008</a>)</span> linearizes the model around each subject’s conditional mode, whereas stochastic approximation expectation-maximization (SAEM) <span class="citation" data-cites="kuhn2005maximum">(<a href="#ref-kuhn2005maximum" role="doc-biblioref">Kuhn and Lavielle 2005</a>)</span> uses stochastic sampling within an iterative optimization scheme.</p>
-<p>Variational inference (VI) approaches the same integration problem through optimization. A tractable approximate posterior is fit by maximizing a lower bound on the marginal likelihood, the evidence lower bound (ELBO). Recent work has extended this framework to <em>amortized</em> VI for NLME models, in which a shared neural encoder maps a subject’s data to subject-specific posterior parameters <span class="citation" data-cites="arruda2024amortized">(<a href="#ref-arruda2024amortized" role="doc-biblioref">Arruda et al. 2024</a>)</span>. Once trained, the encoder can be reused across subjects and potentially across related datasets, making amortized inference attractive in settings where repeated fitting is required.</p>
+<p>Variational inference (VI) approaches the same integration problem through optimization. A tractable approximate posterior is fit by maximizing a lower bound on the marginal likelihood, the evidence lower bound (ELBO). Recent work has extended this framework to <em>amortized*</em> VI for NLME models, in which a shared neural encoder maps a subject’s data to subject-specific posterior parameters <span class="citation" data-cites="arruda2024amortized">(<a href="#ref-arruda2024amortized" role="doc-biblioref">Arruda et al. 2024</a>)</span>. Once trained, the encoder can be reused across subjects and potentially across related datasets, making amortized inference attractive in settings where repeated fitting is required.</p>
 <p>A central limitation of the standard ELBO is that an imperfect variational approximation can produce a loose bound and distorted posterior uncertainty. Recent applications of VI to NLME models have noted underestimation of variability parameters <span class="citation" data-cites="tarek2026fitting li2026variational baaz2026empirical">(<a href="#ref-tarek2026fitting" role="doc-biblioref">Tarek and Afonso 2026</a>; <a href="#ref-li2026variational" role="doc-biblioref">Li et al. 2026</a>; <a href="#ref-baaz2026empirical" role="doc-biblioref">Baaz, Sjöberg, and Jirstrand 2026</a>)</span>, but the phenomenon has not been systematically characterized across sampling designs, posterior architectures, and variational families. In NLME models, this issue is especially important because between-subject variability is often scientifically consequential and can influence downstream decisions such as covariate modeling and random-effect selection. It is therefore necessary to determine not only whether the bias occurs, but also whether it can be corrected and whether corrected point estimates are sufficient for downstream likelihood-based inference.</p>
 <p>In this work, we systematically characterize the dependence of between-subject variability estimates on the number of importance samples, <span class="math inline">\(K\)</span>, under the standard ELBO (<span class="math inline">\(K=1\)</span>) and IW-ELBO (<span class="math inline">\(K&gt;1\)</span>). We examine dense and sparse sampling designs, free and amortized posterior architectures, and Gaussian and normalizing-flow variational families. We benchmark corrected VI against FOCEI and SAEM on matched simulated datasets, test whether the same pattern reproduces in two real pharmacokinetic datasets, and extend the analysis to a nonlinear Michaelis-Menten elimination model. We further evaluate importance-sampling effective sample size as a practical diagnostic of fit quality and assess whether recovered marginal likelihoods support calibrated likelihood-ratio testing for changes in random-effect structure. Together, these experiments identify where VI provides reliable NLME estimation, where importance weighting materially improves accuracy, and where posterior architecture remains important for downstream inference.</p>
 </section>
@@ -147,7 +147,7 @@ y_{ij} = f(t_{ij}, \phi_i) \cdot \exp(\epsilon_{ij}), \qquad
 <p><span class="math display">\[
 \Omega = \operatorname{diag}(\omega_1^2, \ldots, \omega_p^2),
 \]</span></p>
-<p>where <span class="math inline">\(\omega_j\)</span> denotes the between-subject standard deviation for random effect <span class="math inline">\(j\)</span>. Accordingly, reported quantities such as <span class="math inline">\(\omega_{CL}\)</span>, <span class="math inline">\(\omega_V\)</span>, and <span class="math inline">\(\omega_{k_a}\)</span> are standard deviations rather than variances. In prose, we use <em>between-subject variability</em> (BSV) when referring to this variability conceptually and reserve <span class="math inline">\(\Omega\)</span> for the covariance matrix.</p>
+<p>where <span class="math inline">\(\omega_j\)</span> denotes the between-subject standard deviation for random effect <span class="math inline">\(j\)</span>. Accordingly, reported quantities such as <span class="math inline">\(\omega_{CL}\)</span>, <span class="math inline">\(\omega_V\)</span>, and <span class="math inline">\(\omega_{k_a}\)</span> are standard deviations rather than variances. In prose, we use <em>between-subject variability*</em> (BSV) when referring to this variability conceptually and reserve <span class="math inline">\(\Omega\)</span> for the covariance matrix.</p>
 <p>The population-level likelihood contribution of subject <span class="math inline">\(i\)</span> requires integrating the random effects out of the joint density (<a href="#eq-marginal-likelihood" class="quarto-xref">Equation&nbsp;4</a>),</p>
 <p><span id="eq-marginal-likelihood"><span class="math display">\[
 p(y_i \mid \theta, \Omega, \sigma^2) =
@@ -171,13 +171,12 @@ p(y_i \mid \theta, \Omega, \sigma^2) =
 \frac{p(y_i, \eta_i^{(k)} \mid \theta, \Omega, \sigma^2)}
 {q_\lambda(\eta_i^{(k)})} \right],
 \tag{6}\]</span></span></p>
-<p>which is provably a tighter lower bound for larger <span class="math inline">\(K\)</span> and converges to the true marginal log-likelihood as <span class="math inline">\(K \to \infty\)</span>; <span class="math inline">\(K=1\)</span> recovers the standard ELBO exactly. We fit models at <span class="math inline">\(K \in \{1, 8, 64\}\)</span> throughout, treating <span class="math inline">\(K=1\)</span> as the baseline against which the importance-weighting correction is measured. A post-hoc, higher-precision importance-sampling estimate of the marginal likelihood (independent of the training <span class="math inline">\(K\)</span>) is also used to place fitted models on the same objective-function-value (OFV) scale conventionally reported by FOCEI/SAEM software, <span class="math inline">\(\mathrm{OFV}
-= -2 \log p(y \mid \theta, \Omega, \sigma^2)\)</span>.</p>
+<p>which is provably a tighter lower bound for larger <span class="math inline">\(K\)</span> and converges to the true marginal log-likelihood as <span class="math inline">\(K \to \infty\)</span>; <span class="math inline">\(K=1\)</span> recovers the standard ELBO exactly. We fit models at <span class="math inline">\(K \in \{1, 8, 64\}\)</span> throughout, treating <span class="math inline">\(K=1\)</span> as the baseline against which the importance-weighting correction is measured. A post-hoc, higher-precision importance-sampling estimate of the marginal likelihood (independent of the training <span class="math inline">\(K\)</span>) is also used to place fitted models on the same objective-function-value (OFV) scale conventionally reported by FOCEI/SAEM software, <span class="math inline">\(\mathrm{OFV} = -2 \log p(y \mid \theta, \Omega, \sigma^2)\)</span>.</p>
 </section>
 <section id="variational-posterior-families" class="level3">
 <h3 class="anchored" data-anchor-id="variational-posterior-families">Variational Posterior Families</h3>
 <p>We cross two independent design choices for the variational posterior.</p>
-<p><strong>Free vs.&nbsp;amortized.</strong> A <em>free</em> posterior assigns each subject <span class="math inline">\(i\)</span> its own variational parameters <span class="math inline">\(\lambda_i = (\mu_i, s_i)\)</span>, optimized independently subject by subject. An <em>amortized</em> posterior instead learns a single shared encoder <span class="math inline">\(\lambda_i = g_\psi(y_i)\)</span> mapping any subject’s observed data directly to variational parameters, so that inference for a new subject requires only a forward pass through <span class="math inline">\(g_\psi\)</span> rather than a fresh per-subject optimization, the property that makes amortized VI attractive for reuse across new datasets <span class="citation" data-cites="arruda2024amortized">(<a href="#ref-arruda2024amortized" role="doc-biblioref">Arruda et al. 2024</a>)</span>.</p>
+<p><strong>Free vs.&nbsp;amortized.</strong> A <em>free*</em> posterior assigns each subject <span class="math inline">\(i\)</span> its own variational parameters <span class="math inline">\(\lambda_i = (\mu_i, s_i)\)</span>, optimized independently subject by subject. An <em>amortized*</em> posterior instead learns a single shared encoder <span class="math inline">\(\lambda_i = g_\psi(y_i)\)</span> mapping any subject’s observed data directly to variational parameters, so that inference for a new subject requires only a forward pass through <span class="math inline">\(g_\psi\)</span> rather than a fresh per-subject optimization, the property that makes amortized VI attractive for reuse across new datasets <span class="citation" data-cites="arruda2024amortized">(<a href="#ref-arruda2024amortized" role="doc-biblioref">Arruda et al. 2024</a>)</span>.</p>
 <p><strong>Gaussian vs.&nbsp;normalizing flow.</strong> Within either posterior architecture, the variational family itself may be a simple diagonal Gaussian, <span class="math inline">\(q(\eta_i) = \mathcal{N}(\mu_i, \mathrm{diag}(s_i^2))\)</span>, or a richer family constructed via a conditional normalizing flow <span class="citation" data-cites="rezende2015variational papamakarios2021normalizing">(<a href="#ref-rezende2015variational" role="doc-biblioref">Rezende and Mohamed 2015</a>; <a href="#ref-papamakarios2021normalizing" role="doc-biblioref">Papamakarios et al. 2021</a>)</span>. In the flow case, a latent variable <span class="math inline">\(z_i \sim \mathcal{N}(0, I)\)</span> is transformed by an invertible, differentiable map <span class="math inline">\(h_\psi\)</span> conditioned on the base posterior’s parameters (<a href="#eq-flow-density" class="quarto-xref">Equation&nbsp;7</a>),</p>
 <p><span id="eq-flow-density"><span class="math display">\[
 \eta_i = h_\psi(z_i \,;\, \mu_i, s_i), \qquad
@@ -240,7 +239,7 @@ A(0) = \mathrm{Dose},
 <h2 class="anchored" data-anchor-id="results">Results</h2>
 <section id="standard-elbo-variational-inference-underestimates-between-subject-variability" class="level3">
 <h3 class="anchored" data-anchor-id="standard-elbo-variational-inference-underestimates-between-subject-variability">Standard-ELBO Variational Inference Underestimates Between-Subject Variability</h3>
-<p>On the linear one-compartment model with known ground truth, standard-ELBO (<span class="math inline">\(K=1\)</span>) fitting systematically underestimates between-subject variability under both free and amortized posteriors, with the bias substantially reduced by importance weighting at larger <span class="math inline">\(K\)</span> (<a href="#fig-phase0-omega-bias" class="quarto-xref">Figure&nbsp;1</a> and <a href="#supptbl-phase0-headline" class="quarto-xref">Table S1</a>). Structural fixed effects show much less dependence on <span class="math inline">\(K\)</span>. Clearance and volume remain comparatively stable, whereas <span class="math inline">\(k_a\)</span> is consistently underestimated by a similar amount across <span class="math inline">\(K\)</span>, indicating a persistent bias that is distinct from the strongly <span class="math inline">\(K\)</span>-dependent behavior of the random-effect parameters. Residual-error estimates show greater <span class="math inline">\(K\)</span>-dependence in some settings, consistent with partial compensation between residual and between-subject variability (<a href="#supptbl-phase0-fixed-effects" class="quarto-xref">Table S2</a>; <a href="#suppfig-phase0-fixed-effects" class="quarto-xref">Figure S1</a>).</p>
+<p>On the linear one-compartment model with known ground truth, standard-ELBO (<span class="math inline">\(K=1\)</span>) fitting systematically underestimates between-subject variability under both free and amortized posteriors, with the bias substantially reduced by importance weighting at larger <span class="math inline">\(K\)</span> (<a href="#fig-phase0-omega-bias" class="quarto-xref">Figure&nbsp;1</a> and <a href="#supptbl-phase0-combined" class="quarto-xref">Table S1</a>). Structural fixed effects show much less dependence on <span class="math inline">\(K\)</span>. Clearance and volume remain comparatively stable, whereas <span class="math inline">\(k_a\)</span> is consistently underestimated by a similar amount across <span class="math inline">\(K\)</span>, indicating a persistent bias that is distinct from the strongly <span class="math inline">\(K\)</span>-dependent behavior of the random-effect parameters. Residual-error estimates show greater <span class="math inline">\(K\)</span>-dependence in some settings, consistent with partial compensation between residual and between-subject variability (<a href="#supptbl-phase0-combined" class="quarto-xref">Table S1</a>; <a href="#suppfig-phase0-fixed-effects" class="quarto-xref">Figure S1</a>).</p>
 <div id="fig-phase0-omega-bias" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-phase0-omega-bias-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -254,7 +253,7 @@ Figure&nbsp;1: random-effect SD bias by <span class="math inline">\(K\)</span>, 
 </section>
 <section id="sparse-sampling-designs-and-richer-variational-families" class="level3">
 <h3 class="anchored" data-anchor-id="sparse-sampling-designs-and-richer-variational-families">Sparse Sampling Designs and Richer Variational Families</h3>
-<p>Sparse sampling designs roughly double the standard-ELBO bias relative to dense sampling at matched <span class="math inline">\(K\)</span>, consistent with the mechanism being one of identifiability: whichever random effect the sampling design least constrains shrinks the most under standard-ELBO training. Independently, a richer variational family (normalizing flow) closes most of the gap that importance-weighting alone leaves at low <span class="math inline">\(K\)</span>, with the free posterior under the flow family showing negligible bias even at <span class="math inline">\(K=1\)</span> in the dense design (<a href="#fig-phase1-grid" class="quarto-xref">Figure&nbsp;2</a> and <a href="#supptbl-phase1-q2q4" class="quarto-xref">Table S3</a>). Structural fixed-effect estimates are substantially less sensitive to <span class="math inline">\(K\)</span> across the same grid, whereas residual-error estimates show greater dependence on <span class="math inline">\(K\)</span> in some panels, consistent with redistribution of unexplained variability between residual error and between-subject random effects (<a href="#supptbl-phase1-q2q4-fixed-effects" class="quarto-xref">Table S4</a>; <a href="#suppfig-phase1-fixed-effects" class="quarto-xref">Figure S2</a>).</p>
+<p>Sparse sampling designs roughly double the standard-ELBO bias relative to dense sampling at matched <span class="math inline">\(K\)</span>, consistent with the mechanism being one of identifiability: whichever random effect the sampling design least constrains shrinks the most under standard-ELBO training. Independently, a richer variational family (normalizing flow) closes most of the gap that importance-weighting alone leaves at low <span class="math inline">\(K\)</span>, with the free posterior under the flow family showing negligible bias even at <span class="math inline">\(K=1\)</span> in the dense design (<a href="#fig-phase1-grid" class="quarto-xref">Figure&nbsp;2</a> and <a href="#supptbl-phase1-combined" class="quarto-xref">Table S2</a>). Structural fixed-effect estimates are substantially less sensitive to <span class="math inline">\(K\)</span> across the same grid, whereas residual-error estimates show greater dependence on <span class="math inline">\(K\)</span> in some panels, consistent with redistribution of unexplained variability between residual error and between-subject random effects (<a href="#supptbl-phase1-combined" class="quarto-xref">Table S2</a>; <a href="#suppfig-phase1-fixed-effects" class="quarto-xref">Figure S2</a>).</p>
 <div id="fig-phase1-grid" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-phase1-grid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -269,7 +268,7 @@ Figure&nbsp;2: random-effect SD bias by <span class="math inline">\(K\)</span>, 
 </section>
 <section id="nonlinear-elimination-kinetics" class="level3">
 <h3 class="anchored" data-anchor-id="nonlinear-elimination-kinetics">Nonlinear Elimination Kinetics</h3>
-<p>Extending to the Michaelis-Menten elimination model, an initial attempt to place between-subject variability on both <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(K_m\)</span> simultaneously showed severe, stable bias in <span class="math inline">\(\omega_{K_m}\)</span> (on the order of <span class="math inline">\(-80\%\)</span> to <span class="math inline">\(-90\%\)</span>) that did not improve with additional training steps or a redesigned sampling window, while <span class="math inline">\(\omega_{V_{\max}}\)</span>’s bias remained modest throughout, a pattern consistent with a genuine structural identifiability limitation of estimating variability on both Michaelis-Menten parameters simultaneously, a difficulty recognized in standard pharmacometric practice for saturable-kinetics models and not specific to variational inference. Restricting between-subject variability to <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(V\)</span> only, with <span class="math inline">\(K_m\)</span> retained as a population-level fixed effect, resolves this: fixed effects recover cleanly, and the same <span class="math inline">\(K=1\)</span>-to-<span class="math inline">\(K=64\)</span> shrinkage-and-correction signature seen in the linear tier reproduces on <span class="math inline">\(\omega_V\)</span>; <span class="math inline">\(\omega_{V_{\max}}\)</span>’s bias is small and essentially flat across <span class="math inline">\(K\)</span> in this design, with little shrinkage at <span class="math inline">\(K=1\)</span> to correct (<a href="#fig-phase1-nonlinear" class="quarto-xref">Figure&nbsp;3</a> and <a href="#supptbl-phase1-q3-nonlinear" class="quarto-xref">Table S5</a>).</p>
+<p>Extending to the Michaelis-Menten elimination model, an initial attempt to place between-subject variability on both <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(K_m\)</span> simultaneously showed severe, stable bias in <span class="math inline">\(\omega_{K_m}\)</span> (on the order of <span class="math inline">\(-80\%\)</span> to <span class="math inline">\(-90\%\)</span>) that did not improve with additional training steps or a redesigned sampling window, while <span class="math inline">\(\omega_{V_{\max}}\)</span>’s bias remained modest throughout, a pattern consistent with a genuine structural identifiability limitation of estimating variability on both Michaelis-Menten parameters simultaneously, a difficulty recognized in standard pharmacometric practice for saturable-kinetics models and not specific to variational inference. Restricting between-subject variability to <span class="math inline">\(V_{\max}\)</span> and <span class="math inline">\(V\)</span> only, with <span class="math inline">\(K_m\)</span> retained as a population-level fixed effect, resolves this: fixed effects recover cleanly, and the same <span class="math inline">\(K=1\)</span>-to-<span class="math inline">\(K=64\)</span> shrinkage-and-correction signature seen in the linear tier reproduces on <span class="math inline">\(\omega_V\)</span>; <span class="math inline">\(\omega_{V_{\max}}\)</span>’s bias is small and essentially flat across <span class="math inline">\(K\)</span> in this design, with little shrinkage at <span class="math inline">\(K=1\)</span> to correct (<a href="#fig-phase1-nonlinear" class="quarto-xref">Figure&nbsp;3</a> and <a href="#supptbl-phase1-q3-nonlinear" class="quarto-xref">Table S3</a>).</p>
 <div id="fig-phase1-nonlinear" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-phase1-nonlinear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -284,7 +283,7 @@ Figure&nbsp;3: Random-effect SD bias by <span class="math inline">\(K\)</span> f
 </section>
 <section id="real-data-validation-1" class="level3">
 <h3 class="anchored" data-anchor-id="real-data-validation-1">Real-Data Validation</h3>
-<p>Both real pharmacokinetic datasets reproduce the standard-ELBO shrinkage signature identified in simulation: <span class="math inline">\(K=1\)</span> reports smaller random-effect standard deviations than <span class="math inline">\(K=64\)</span> on the identical dataset, with the clearance random effect showing the least shrinkage of the three, consistent with clearance being the most robustly identified parameter throughout the simulated results above (<a href="#fig-realdata-k1-vs-khigh" class="quarto-xref">Figure&nbsp;4</a> and <a href="#supptbl-realdata-k1-vs-khigh" class="quarto-xref">Table S6</a>). On warfarin, fixed-effect estimates for clearance and volume of distribution fall inside the published 95% confidence intervals of an independently fitted FOCEI model on the same data <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span> despite this work’s simpler one-compartment, single-step absorption structure versus the published model’s two-step transit-compartment absorption, a real, external agreement on the parameters that should agree given the shared elimination structure, not merely a directional match.</p>
+<p>Both real pharmacokinetic datasets reproduce the standard-ELBO shrinkage signature identified in simulation: <span class="math inline">\(K=1\)</span> reports smaller random-effect standard deviations than <span class="math inline">\(K=64\)</span> on the identical dataset, with the clearance random effect showing the least shrinkage of the three, consistent with clearance being the most robustly identified parameter throughout the simulated results above (<a href="#fig-realdata-k1-vs-khigh" class="quarto-xref">Figure&nbsp;4</a> and <a href="#supptbl-realdata-k1-vs-khigh" class="quarto-xref">Table S4</a>). On warfarin, fixed-effect estimates for clearance and volume of distribution fall inside the published 95% confidence intervals of an independently fitted FOCEI model on the same data <span class="citation" data-cites="fidler2019nonlinear">(<a href="#ref-fidler2019nonlinear" role="doc-biblioref">Fidler et al. 2019</a>)</span> despite this work’s simpler one-compartment, single-step absorption structure versus the published model’s two-step transit-compartment absorption, a real, external agreement on the parameters that should agree given the shared elimination structure, not merely a directional match.</p>
 <div id="fig-realdata-k1-vs-khigh" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-realdata-k1-vs-khigh-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -298,7 +297,7 @@ Figure&nbsp;4: between-subject variability estimates at <span class="math inline
 </section>
 <section id="diagnosing-fit-quality-via-effective-sample-size" class="level3">
 <h3 class="anchored" data-anchor-id="diagnosing-fit-quality-via-effective-sample-size">Diagnosing Fit Quality via Effective Sample Size</h3>
-<p>Mean importance-sampling effective sample size cleanly separates deliberately under-trained fits from well-converged fits on matched simulated data (<a href="#fig-psis-ess" class="quarto-xref">Figure&nbsp;5</a> and <a href="#supptbl-psis-ess" class="quarto-xref">Table S7</a>), supporting its use as a practical diagnostic on real data where no ground truth is available to check convergence directly. A fixed per-subject tail-count threshold does not separate the two groups as cleanly, reflecting genuine subject-to-subject variation in fit difficulty independent of overall training adequacy; we therefore recommend the aggregate (mean or median) ESS as the primary diagnostic, not a fixed per-subject threshold.</p>
+<p>Mean importance-sampling effective sample size cleanly separates deliberately under-trained fits from well-converged fits on matched simulated data (<a href="#fig-psis-ess" class="quarto-xref">Figure&nbsp;5</a> and <a href="#supptbl-psis-ess" class="quarto-xref">Table S5</a>), supporting its use as a practical diagnostic on real data where no ground truth is available to check convergence directly. A fixed per-subject tail-count threshold does not separate the two groups as cleanly, reflecting genuine subject-to-subject variation in fit difficulty independent of overall training adequacy; we therefore recommend the aggregate (mean or median) ESS as the primary diagnostic, not a fixed per-subject threshold.</p>
 <div id="fig-psis-ess" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-psis-ess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -312,7 +311,7 @@ Figure&nbsp;5: Per-subject effective sample size distribution, well-converged ve
 </section>
 <section id="validity-of-the-recovered-likelihood-for-model-selection" class="level3">
 <h3 class="anchored" data-anchor-id="validity-of-the-recovered-likelihood-for-model-selection">Validity of the Recovered Likelihood for Model Selection</h3>
-<p>Likelihood-ratio tests built on the free posterior’s recovered marginal likelihood were miscalibrated against the correct Self-Liang boundary mixture reference for testing whether a random effect’s variance is zero (<a href="#fig-deltaofv-calibration" class="quarto-xref">Figure&nbsp;6</a>). Under the free posterior, only 25% of 100 null replicates fell within the prespecified boundary region, compared with the approximately 50% expected under the theoretical mixture; 22 replicates produced negative <span class="math inline">\(\Delta\mathrm{OFV}\)</span> values. Among the strictly positive replicates, the distribution also deviated from <span class="math inline">\(\chi^2_1\)</span> (Kolmogorov-Smirnov <span class="math inline">\(D=0.2922\)</span>, <span class="math inline">\(p&lt;0.0001\)</span>), although the empirical type-I error using the correct boundary-mixture cutoff was 6%, close to the nominal 5% level. The complete numerical calibration summary is provided in <a href="#supptbl-deltaofv-calibration" class="quarto-xref">Table S8</a>.</p>
+<p>Likelihood-ratio tests built on the free posterior’s recovered marginal likelihood were miscalibrated against the correct Self-Liang boundary mixture reference for testing whether a random effect’s variance is zero (<a href="#fig-deltaofv-calibration" class="quarto-xref">Figure&nbsp;6</a>). Under the free posterior, only 25% of 100 null replicates fell within the prespecified boundary region, compared with the approximately 50% expected under the theoretical mixture; 22 replicates produced negative <span class="math inline">\(\Delta\mathrm{OFV}\)</span> values. Among the strictly positive replicates, the distribution also deviated from <span class="math inline">\(\chi^2_1\)</span> (Kolmogorov-Smirnov <span class="math inline">\(D=0.2922\)</span>, <span class="math inline">\(p&lt;0.0001\)</span>), although the empirical type-I error using the correct boundary-mixture cutoff was 6%, close to the nominal 5% level. The complete numerical calibration summary is provided in <a href="#supptbl-deltaofv-calibration" class="quarto-xref">Table S6</a>.</p>
 <p>This miscalibration was not explained by insufficient post-hoc importance-sampling precision: increasing the post-hoc evaluation sample size fivefold left the calibration essentially unchanged, including a highly discrepant replicate whose <span class="math inline">\(\Delta\mathrm{OFV}\)</span> value remained nearly unchanged. Switching to an amortized posterior substantially improved the boundary-mass component of the calibration, reproducibly at two independent replicate counts, although a smaller residual deviation in the shape of the non-boundary distribution remained. We attribute the free posterior’s miscalibration to an effective-degrees-of-freedom mismatch: the more-complex model receives an additional free variational parameter pair for every subject, far exceeding the single population-level variance parameter nominally being tested. Classical asymptotic theory, including the Self-Liang boundary-mixture reference, does not account for this per-subject asymmetry; a shared amortized encoder does not introduce the same increase in subject-specific variational parameters.</p>
 <div id="fig-deltaofv-calibration" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
@@ -530,391 +529,152 @@ Figure S2: Structural fixed-effect and residual-error bias by <span class="math 
 </section>
 <section id="supplementary-tables" class="level3">
 <h3 class="anchored" data-anchor-id="supplementary-tables">Supplementary Tables</h3>
-<div id="supptbl-phase0-headline" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="supptbl-phase0-combined" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-supptbl figure">
-<div aria-describedby="supptbl-phase0-headline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div aria-describedby="supptbl-phase0-combined-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
+<colgroup>
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+</colgroup>
 <thead>
 <tr class="header">
 <th>Posterior</th>
-<th><span class="math inline">\(K\)</span></th>
+<th>Parameter type</th>
 <th>Parameter</th>
-<th>Mean bias (%)</th>
-<th>SD bias (%)</th>
-<th>n</th>
+<th><span class="math inline">\(K=1\)</span></th>
+<th><span class="math inline">\(K=8\)</span></th>
+<th><span class="math inline">\(K=64\)</span></th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td>amortized</td>
-<td>1</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.484 (2.85)</td>
+<td>-0.0361 (4.16)</td>
+<td>-0.321 (3.49)</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.0532 (3.32)</td>
+<td>-0.412 (2.99)</td>
+<td>-0.241 (2.89)</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-3.94 (4.48)</td>
+<td>-4.07 (3.17)</td>
+<td>-2.92 (3.89)</td>
+</tr>
+<tr class="even">
+<td>amortized</td>
+<td>Residual variability</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>15.3 (6.29)</td>
+<td>0.315 (2.85)</td>
+<td>-1.21 (3.72)</td>
+</tr>
+<tr class="odd">
+<td>amortized</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.71</td>
-<td>5.91</td>
-<td>8</td>
+<td>-0.712 (5.91)</td>
+<td>0.17 (7.51)</td>
+<td>-0.329 (7.05)</td>
 </tr>
 <tr class="even">
 <td>amortized</td>
-<td>1</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_V\)</span></td>
-<td>-47.83</td>
-<td>39.58</td>
-<td>8</td>
+<td>-47.8 (39.6)</td>
+<td>-16.5 (14.1)</td>
+<td>-9.67 (13.4)</td>
 </tr>
 <tr class="odd">
 <td>amortized</td>
-<td>1</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-13.45</td>
-<td>35.79</td>
-<td>8</td>
+<td>-13.5 (35.8)</td>
+<td>-5.79 (16.9)</td>
+<td>-2.61 (13.7)</td>
 </tr>
 <tr class="even">
-<td>amortized</td>
-<td>8</td>
+<td>free</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.524 (3.45)</td>
+<td>1.28 (4.49)</td>
+<td>0.198 (3.44)</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.508 (3.69)</td>
+<td>-0.249 (2.66)</td>
+<td>-0.267 (2.71)</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-4.03 (5.3)</td>
+<td>-3.2 (3.43)</td>
+<td>-3.13 (3.15)</td>
+</tr>
+<tr class="odd">
+<td>free</td>
+<td>Residual variability</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>9.92 (3.71)</td>
+<td>-0.099 (3.46)</td>
+<td>-1.15 (3.49)</td>
+</tr>
+<tr class="even">
+<td>free</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>0.17</td>
-<td>7.51</td>
-<td>8</td>
+<td>-1.67 (6.34)</td>
+<td>0.248 (7.49)</td>
+<td>0.415 (7.43)</td>
 </tr>
 <tr class="odd">
-<td>amortized</td>
-<td>8</td>
+<td>free</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_V\)</span></td>
-<td>-16.5</td>
-<td>14.09</td>
-<td>8</td>
+<td>-47.4 (42)</td>
+<td>-16.4 (13.6)</td>
+<td>-9 (12.2)</td>
 </tr>
 <tr class="even">
-<td>amortized</td>
-<td>8</td>
+<td>free</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-5.79</td>
-<td>16.88</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>amortized</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.33</td>
-<td>7.05</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>amortized</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-9.67</td>
-<td>13.43</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>amortized</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-2.61</td>
-<td>13.74</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-1.67</td>
-<td>6.34</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-47.43</td>
-<td>42.03</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-8.91</td>
-<td>33.74</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>0.25</td>
-<td>7.49</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-16.38</td>
-<td>13.58</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-6.75</td>
-<td>16.45</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>0.42</td>
-<td>7.43</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-9</td>
-<td>12.25</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-2.03</td>
-<td>12.11</td>
-<td>8</td>
+<td>-8.91 (33.7)</td>
+<td>-6.75 (16.4)</td>
+<td>-2.03 (12.1)</td>
 </tr>
 </tbody>
 </table>
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase0-headline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table S1: Mean relative bias (%) in random-effect standard deviations (<span class="math inline">\(\omega\)</span>) by posterior architecture and <span class="math inline">\(K\)</span>.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase0-combined-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S1: Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations by posterior architecture and <span class="math inline">\(K\)</span>. Values in parentheses are the standard deviation of relative bias across replicates.
 </figcaption>
 </figure>
 </div>
-<div id="supptbl-phase0-fixed-effects" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="supptbl-phase1-combined" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-supptbl figure">
-<div aria-describedby="supptbl-phase0-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<thead>
-<tr class="header">
-<th>Posterior</th>
-<th><span class="math inline">\(K\)</span></th>
-<th>Parameter</th>
-<th>Mean bias (%)</th>
-<th>SD bias (%)</th>
-<th>n</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>amortized</td>
-<td>1</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.48</td>
-<td>2.85</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>amortized</td>
-<td>1</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.05</td>
-<td>3.32</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>amortized</td>
-<td>1</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-3.94</td>
-<td>4.48</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>amortized</td>
-<td>1</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>15.34</td>
-<td>6.29</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>amortized</td>
-<td>8</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.04</td>
-<td>4.16</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>amortized</td>
-<td>8</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.41</td>
-<td>2.99</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>amortized</td>
-<td>8</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-4.07</td>
-<td>3.17</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>amortized</td>
-<td>8</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>0.31</td>
-<td>2.85</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>amortized</td>
-<td>64</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.32</td>
-<td>3.49</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>amortized</td>
-<td>64</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.24</td>
-<td>2.89</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>amortized</td>
-<td>64</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-2.92</td>
-<td>3.89</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>amortized</td>
-<td>64</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>-1.21</td>
-<td>3.72</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>1</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.52</td>
-<td>3.45</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>1</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.51</td>
-<td>3.69</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>1</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-4.03</td>
-<td>5.3</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>1</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>9.92</td>
-<td>3.71</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>8</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>1.28</td>
-<td>4.49</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>8</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.25</td>
-<td>2.66</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>8</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-3.2</td>
-<td>3.43</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>8</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>-0.1</td>
-<td>3.46</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>64</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.2</td>
-<td>3.44</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>64</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.27</td>
-<td>2.71</td>
-<td>8</td>
-</tr>
-<tr class="odd">
-<td>free</td>
-<td>64</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-3.13</td>
-<td>3.15</td>
-<td>8</td>
-</tr>
-<tr class="even">
-<td>free</td>
-<td>64</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>-1.15</td>
-<td>3.49</td>
-<td>8</td>
-</tr>
-</tbody>
-</table>
-</div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase0-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table S2: Mean relative bias (%) in structural fixed effects and residual error by posterior architecture and <span class="math inline">\(K\)</span>. This companion table distinguishes persistent or residual-error bias from the strongly <span class="math inline">\(K\)</span>-dependent bias in between-subject variability.
-</figcaption>
-</figure>
-</div>
-<div id="supptbl-phase1-q2q4" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-supptbl figure">
-<div aria-describedby="supptbl-phase1-q2q4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div aria-describedby="supptbl-phase1-combined-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
 <colgroup>
 <col style="width: 12%">
@@ -931,1314 +691,439 @@ Table S2: Mean relative bias (%) in structural fixed effects and residual error 
 <th>Sampling design</th>
 <th>Posterior</th>
 <th>Variational family</th>
-<th><span class="math inline">\(K\)</span></th>
+<th>Parameter type</th>
 <th>Parameter</th>
-<th>Mean bias (%)</th>
-<th>SD bias (%)</th>
-<th>n</th>
+<th><span class="math inline">\(K=1\)</span></th>
+<th><span class="math inline">\(K=8\)</span></th>
+<th><span class="math inline">\(K=64\)</span></th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td>dense</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-2.14</td>
-<td>7.93</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.171 (2.81)</td>
+<td>0.237 (2.52)</td>
+<td>-0.266 (2.55)</td>
 </tr>
 <tr class="even">
 <td>dense</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-25.58</td>
-<td>29.33</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.755 (2.15)</td>
+<td>-0.0364 (2.32)</td>
+<td>-0.111 (2.24)</td>
 </tr>
 <tr class="odd">
 <td>dense</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-17.35</td>
-<td>21.74</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>1.34 (4.65)</td>
+<td>0.34 (4.44)</td>
+<td>0.864 (4.28)</td>
 </tr>
 <tr class="even">
 <td>dense</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.3</td>
-<td>6.76</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>Residual variability</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>14.9 (8.2)</td>
+<td>0.789 (3.8)</td>
+<td>-0.32 (3.81)</td>
 </tr>
 <tr class="odd">
 <td>dense</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-6</td>
-<td>12.07</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-2.14 (7.93)</td>
+<td>-0.303 (6.76)</td>
+<td>-0.102 (7.11)</td>
 </tr>
 <tr class="even">
 <td>dense</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-6.11</td>
-<td>9.63</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-25.6 (29.3)</td>
+<td>-6 (12.1)</td>
+<td>-1.86 (10.4)</td>
 </tr>
 <tr class="odd">
 <td>dense</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.1</td>
-<td>7.11</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-1.86</td>
-<td>10.43</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-2</td>
-<td>8.26</td>
-<td>30</td>
+<td>-17.3 (21.7)</td>
+<td>-6.11 (9.63)</td>
+<td>-2 (8.26)</td>
 </tr>
 <tr class="even">
 <td>dense</td>
 <td>free</td>
-<td>flow</td>
-<td>1</td>
+<td>Flow</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>-0.535 (3.04)</td>
+<td>-0.0883 (2.44)</td>
+<td>-0.524 (2.48)</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>Flow</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.311 (2.27)</td>
+<td>0.0194 (2.28)</td>
+<td>-0.201 (2.5)</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>Flow</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>0.149 (4.16)</td>
+<td>0.101 (4.06)</td>
+<td>0.904 (4.39)</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>Flow</td>
+<td>Residual variability</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>0.956 (3.31)</td>
+<td>0.114 (4.09)</td>
+<td>-0.282 (3.8)</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>Flow</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.08</td>
-<td>7.15</td>
-<td>30</td>
+<td>-0.0845 (7.15)</td>
+<td>-0.0688 (7.35)</td>
+<td>0.165 (6.99)</td>
 </tr>
 <tr class="odd">
 <td>dense</td>
 <td>free</td>
-<td>flow</td>
-<td>1</td>
+<td>Flow</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_V\)</span></td>
-<td>-1.02</td>
-<td>10.11</td>
-<td>30</td>
+<td>-1.02 (10.1)</td>
+<td>-1.21 (10.3)</td>
+<td>-0.58 (10.6)</td>
 </tr>
 <tr class="even">
 <td>dense</td>
 <td>free</td>
-<td>flow</td>
-<td>1</td>
+<td>Flow</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-3</td>
-<td>8.77</td>
-<td>30</td>
+<td>-3 (8.77)</td>
+<td>-1.52 (8.44)</td>
+<td>-0.791 (8.27)</td>
 </tr>
 <tr class="odd">
 <td>dense</td>
 <td>free</td>
-<td>flow</td>
-<td>8</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.133 (2.86)</td>
+<td>0.0176 (3.03)</td>
+<td>-0.328 (2.9)</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.823 (2.28)</td>
+<td>-0.144 (2.35)</td>
+<td>0.209 (2.62)</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>1.3 (4.63)</td>
+<td>0.0647 (4.59)</td>
+<td>0.243 (4.65)</td>
+</tr>
+<tr class="even">
+<td>dense</td>
+<td>free</td>
+<td>Gaussian</td>
+<td>Residual variability</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>8.73 (4.37)</td>
+<td>0.39 (3.83)</td>
+<td>-0.678 (3.64)</td>
+</tr>
+<tr class="odd">
+<td>dense</td>
+<td>free</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.07</td>
-<td>7.35</td>
-<td>30</td>
+<td>-1.04 (7.19)</td>
+<td>0.0186 (7.07)</td>
+<td>-0.000424 (7.22)</td>
 </tr>
 <tr class="even">
 <td>dense</td>
 <td>free</td>
-<td>flow</td>
-<td>8</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_V\)</span></td>
-<td>-1.21</td>
-<td>10.32</td>
-<td>30</td>
+<td>-19.6 (23.2)</td>
+<td>-5.67 (12)</td>
+<td>-1.73 (11.1)</td>
 </tr>
 <tr class="odd">
 <td>dense</td>
 <td>free</td>
-<td>flow</td>
-<td>8</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-1.52</td>
-<td>8.44</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>0.16</td>
-<td>6.99</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-0.58</td>
-<td>10.55</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-0.79</td>
-<td>8.27</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-1.04</td>
-<td>7.19</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-19.58</td>
-<td>23.19</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-16.94</td>
-<td>17.98</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>0.02</td>
-<td>7.07</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-5.67</td>
-<td>11.98</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-5.4</td>
-<td>9.62</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>0</td>
-<td>7.22</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-1.73</td>
-<td>11.07</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-0.96</td>
-<td>8.06</td>
-<td>30</td>
+<td>-16.9 (18)</td>
+<td>-5.4 (9.62)</td>
+<td>-0.961 (8.06)</td>
 </tr>
 <tr class="even">
 <td>sparse</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-1.19</td>
-<td>8.63</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>1.37 (3.2)</td>
+<td>0.36 (3.16)</td>
+<td>0.145 (3.07)</td>
 </tr>
 <tr class="odd">
 <td>sparse</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-81.85</td>
-<td>12.81</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-0.693 (3.07)</td>
+<td>-0.0815 (3.19)</td>
+<td>-0.128 (3.29)</td>
 </tr>
 <tr class="even">
 <td>sparse</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-14.82</td>
-<td>26.86</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-2.64 (6.22)</td>
+<td>-0.922 (6.22)</td>
+<td>0.471 (6.57)</td>
 </tr>
 <tr class="odd">
 <td>sparse</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-2.1</td>
-<td>8.15</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>Residual variability</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>38.1 (9.86)</td>
+<td>12.4 (9.11)</td>
+<td>1.49 (9.08)</td>
 </tr>
 <tr class="even">
 <td>sparse</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-17.92</td>
-<td>24.74</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
+<td><span class="math inline">\(\omega_{CL}\)</span></td>
+<td>-1.19 (8.63)</td>
+<td>-2.1 (8.15)</td>
+<td>-1.1 (7.57)</td>
 </tr>
 <tr class="odd">
 <td>sparse</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-25.12</td>
-<td>33.03</td>
-<td>30</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
+<td><span class="math inline">\(\omega_V\)</span></td>
+<td>-81.9 (12.8)</td>
+<td>-17.9 (24.7)</td>
+<td>-2.83 (12.4)</td>
 </tr>
 <tr class="even">
 <td>sparse</td>
 <td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-1.1</td>
-<td>7.57</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-2.83</td>
-<td>12.41</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-5.57</td>
-<td>21.98</td>
-<td>30</td>
+<td>-14.8 (26.9)</td>
+<td>-25.1 (33)</td>
+<td>-5.57 (22)</td>
 </tr>
 <tr class="odd">
 <td>sparse</td>
 <td>free</td>
-<td>flow</td>
-<td>1</td>
+<td>Flow</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.161 (2.76)</td>
+<td>-0.0955 (2.49)</td>
+<td>-0.0965 (2.68)</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>Flow</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>0.237 (3.06)</td>
+<td>0.294 (2.88)</td>
+<td>0.0393 (3.11)</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>Flow</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-0.443 (5.85)</td>
+<td>0.181 (6.36)</td>
+<td>0.684 (6.39)</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>Flow</td>
+<td>Residual variability</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>6.58 (8.71)</td>
+<td>5.06 (8.67)</td>
+<td>1.45 (8.57)</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>Flow</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-1.16</td>
-<td>7.51</td>
-<td>30</td>
+<td>-1.16 (7.51)</td>
+<td>-0.899 (7.54)</td>
+<td>-0.671 (7.63)</td>
 </tr>
 <tr class="even">
 <td>sparse</td>
 <td>free</td>
-<td>flow</td>
-<td>1</td>
+<td>Flow</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_V\)</span></td>
-<td>-0.93</td>
-<td>11.02</td>
-<td>30</td>
+<td>-0.926 (11)</td>
+<td>-1.7 (12)</td>
+<td>-0.019 (10.5)</td>
 </tr>
 <tr class="odd">
 <td>sparse</td>
 <td>free</td>
-<td>flow</td>
-<td>1</td>
+<td>Flow</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-19.27</td>
-<td>19.96</td>
-<td>30</td>
+<td>-19.3 (20)</td>
+<td>-18.1 (26.1)</td>
+<td>-5.21 (20.9)</td>
 </tr>
 <tr class="even">
 <td>sparse</td>
 <td>free</td>
-<td>flow</td>
-<td>8</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(CL\)</span></td>
+<td>0.88 (2.68)</td>
+<td>0.735 (2.72)</td>
+<td>-0.16 (2.84)</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(V\)</span></td>
+<td>-1.02 (3.03)</td>
+<td>-0.168 (3.37)</td>
+<td>-0.0371 (3.16)</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>Gaussian</td>
+<td>Structural fixed effect</td>
+<td><span class="math inline">\(k_a\)</span></td>
+<td>-2.75 (6.18)</td>
+<td>-0.723 (6.39)</td>
+<td>0.802 (6.44)</td>
+</tr>
+<tr class="odd">
+<td>sparse</td>
+<td>free</td>
+<td>Gaussian</td>
+<td>Residual variability</td>
+<td><span class="math inline">\(\sigma\)</span></td>
+<td>33.3 (9.43)</td>
+<td>11.1 (9.61)</td>
+<td>1.02 (9)</td>
+</tr>
+<tr class="even">
+<td>sparse</td>
+<td>free</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.9</td>
-<td>7.54</td>
-<td>30</td>
+<td>0.234 (7.83)</td>
+<td>-1.71 (8.32)</td>
+<td>-0.419 (7.39)</td>
 </tr>
 <tr class="odd">
 <td>sparse</td>
 <td>free</td>
-<td>flow</td>
-<td>8</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_V\)</span></td>
-<td>-1.7</td>
-<td>12.03</td>
-<td>30</td>
+<td>-83 (15.6)</td>
+<td>-17.4 (26.4)</td>
+<td>-2.65 (11.2)</td>
 </tr>
 <tr class="even">
 <td>sparse</td>
 <td>free</td>
-<td>flow</td>
-<td>8</td>
+<td>Gaussian</td>
+<td>BSV SD</td>
 <td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-18.06</td>
-<td>26.08</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.67</td>
-<td>7.63</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-0.02</td>
-<td>10.54</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-5.21</td>
-<td>20.92</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>0.23</td>
-<td>7.83</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-83.05</td>
-<td>15.61</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-5.38</td>
-<td>26.65</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-1.71</td>
-<td>8.32</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-17.43</td>
-<td>26.43</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-24.26</td>
-<td>33.21</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{CL}\)</span></td>
-<td>-0.42</td>
-<td>7.39</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_V\)</span></td>
-<td>-2.65</td>
-<td>11.17</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\omega_{k_a}\)</span></td>
-<td>-5.12</td>
-<td>21.34</td>
-<td>30</td>
+<td>-5.38 (26.7)</td>
+<td>-24.3 (33.2)</td>
+<td>-5.12 (21.3)</td>
 </tr>
 </tbody>
 </table>
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase1-q2q4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table S3: Mean relative bias (%) in random-effect standard deviations (<span class="math inline">\(\omega\)</span>) by sampling design, posterior architecture, variational family, and <span class="math inline">\(K\)</span>.
-</figcaption>
-</figure>
-</div>
-<div id="supptbl-phase1-q2q4-fixed-effects" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-supptbl figure">
-<div aria-describedby="supptbl-phase1-q2q4-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
-<colgroup>
-<col style="width: 12%">
-<col style="width: 12%">
-<col style="width: 12%">
-<col style="width: 12%">
-<col style="width: 12%">
-<col style="width: 12%">
-<col style="width: 12%">
-<col style="width: 12%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>Sampling design</th>
-<th>Posterior</th>
-<th>Variational family</th>
-<th><span class="math inline">\(K\)</span></th>
-<th>Parameter</th>
-<th>Mean bias (%)</th>
-<th>SD bias (%)</th>
-<th>n</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.17</td>
-<td>2.81</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>0.76</td>
-<td>2.15</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>1.34</td>
-<td>4.65</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>14.93</td>
-<td>8.2</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.24</td>
-<td>2.52</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.04</td>
-<td>2.32</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.34</td>
-<td>4.44</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>0.79</td>
-<td>3.8</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.27</td>
-<td>2.55</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.11</td>
-<td>2.24</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.86</td>
-<td>4.28</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>-0.32</td>
-<td>3.81</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.54</td>
-<td>3.04</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>0.31</td>
-<td>2.27</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.15</td>
-<td>4.16</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>0.96</td>
-<td>3.31</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.09</td>
-<td>2.44</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>0.02</td>
-<td>2.28</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.1</td>
-<td>4.06</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>0.11</td>
-<td>4.09</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.52</td>
-<td>2.48</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.2</td>
-<td>2.5</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.9</td>
-<td>4.39</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>-0.28</td>
-<td>3.8</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.13</td>
-<td>2.86</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>0.82</td>
-<td>2.28</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>1.3</td>
-<td>4.63</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>8.73</td>
-<td>4.37</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.02</td>
-<td>3.03</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.14</td>
-<td>2.35</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.06</td>
-<td>4.59</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>0.39</td>
-<td>3.83</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.33</td>
-<td>2.9</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>0.21</td>
-<td>2.62</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.24</td>
-<td>4.65</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>dense</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>-0.68</td>
-<td>3.64</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>1.37</td>
-<td>3.2</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.69</td>
-<td>3.07</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-2.64</td>
-<td>6.22</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>38.12</td>
-<td>9.86</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.36</td>
-<td>3.16</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.08</td>
-<td>3.19</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-0.92</td>
-<td>6.22</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>12.41</td>
-<td>9.11</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.15</td>
-<td>3.07</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.13</td>
-<td>3.29</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.47</td>
-<td>6.57</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>amortized</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>1.49</td>
-<td>9.08</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.16</td>
-<td>2.76</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>0.24</td>
-<td>3.06</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-0.44</td>
-<td>5.85</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>1</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>6.58</td>
-<td>8.71</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.1</td>
-<td>2.49</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>0.29</td>
-<td>2.88</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.18</td>
-<td>6.36</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>8</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>5.06</td>
-<td>8.67</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.1</td>
-<td>2.68</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>0.04</td>
-<td>3.11</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.68</td>
-<td>6.39</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>flow</td>
-<td>64</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>1.45</td>
-<td>8.57</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.88</td>
-<td>2.68</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-1.02</td>
-<td>3.03</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-2.75</td>
-<td>6.18</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>1</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>33.35</td>
-<td>9.43</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>0.73</td>
-<td>2.72</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.17</td>
-<td>3.37</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>-0.72</td>
-<td>6.39</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>8</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>11.08</td>
-<td>9.61</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(CL\)</span></td>
-<td>-0.16</td>
-<td>2.84</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(V\)</span></td>
-<td>-0.04</td>
-<td>3.16</td>
-<td>30</td>
-</tr>
-<tr class="odd">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(k_a\)</span></td>
-<td>0.8</td>
-<td>6.44</td>
-<td>30</td>
-</tr>
-<tr class="even">
-<td>sparse</td>
-<td>free</td>
-<td>gaussian</td>
-<td>64</td>
-<td><span class="math inline">\(\sigma\)</span></td>
-<td>1.02</td>
-<td>9</td>
-<td>30</td>
-</tr>
-</tbody>
-</table>
-</div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase1-q2q4-fixed-effects-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table S4: Mean relative bias (%) in structural fixed effects and residual error using the same grouping as the primary Phase 1 analysis.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase1-combined-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table S2: Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations by sampling design, posterior architecture, variational family, and <span class="math inline">\(K\)</span>. Values in parentheses are the standard deviation of relative bias across replicates.
 </figcaption>
 </figure>
 </div>
@@ -2473,7 +1358,7 @@ Table S4: Mean relative bias (%) in structural fixed effects and residual error 
 </table>
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-phase1-q3-nonlinear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table S5: Mean parameter estimates, ground-truth values, relative bias (%), and converged fraction for the Michaelis-Menten elimination model.
+Table S3: Mean parameter estimates for the Michaelis-Menten elimination model at each <span class="math inline">\(K\)</span>. Relative bias (%) is shown in parentheses; ground-truth values are provided for reference.
 </figcaption>
 </figure>
 </div>
@@ -2632,7 +1517,7 @@ Table S5: Mean parameter estimates, ground-truth values, relative bias (%), and 
 </table>
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-realdata-k1-vs-khigh-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table S6: Parameter estimates at <span class="math inline">\(K=1\)</span> versus <span class="math inline">\(K=64\)</span> for the theophylline and warfarin datasets, with percent difference between the two estimates.
+Table S4: Parameter estimates at <span class="math inline">\(K=1\)</span> versus <span class="math inline">\(K=64\)</span> for the theophylline and warfarin datasets, with percent difference between the two estimates.
 </figcaption>
 </figure>
 </div>
@@ -2668,7 +1553,7 @@ Table S6: Parameter estimates at <span class="math inline">\(K=1\)</span> versus
 </table>
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-psis-ess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table S7: Aggregate importance-sampling effective sample size by fit-quality arm.
+Table S5: Aggregate importance-sampling effective sample size by fit-quality arm.
 </figcaption>
 </figure>
 </div>
@@ -2710,7 +1595,7 @@ Table S7: Aggregate importance-sampling effective sample size by fit-quality arm
 </table>
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-supptbl" id="supptbl-deltaofv-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table S8: <span class="math inline">\(\Delta\mathrm{OFV}\)</span> calibration summary: boundary fraction, number of negative <span class="math inline">\(\Delta\mathrm{OFV}\)</span> values, Kolmogorov-Smirnov statistic and p-value against <span class="math inline">\(\chi^2_1\)</span> for the strictly positive replicates, and empirical type-I error using the correct Self-Liang boundary-mixture cutoff.
+Table S6: <span class="math inline">\(\Delta\mathrm{OFV}\)</span> calibration summary: boundary fraction, number of negative <span class="math inline">\(\Delta\mathrm{OFV}\)</span> values, Kolmogorov-Smirnov statistic and p-value against <span class="math inline">\(\chi^2_1\)</span> for the strictly positive replicates, and empirical type-I error using the correct Self-Liang boundary-mixture cutoff.
 </figcaption>
 </figure>
 </div>

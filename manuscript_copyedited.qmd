@@ -29,7 +29,7 @@ Nonlinear mixed-effects (NLME) models are widely used to characterize population
 
 Nonlinear mixed-effects (NLME) models are widely used to characterize population-level trends and between-subject variability in pharmacokinetic, pharmacodynamic, and related longitudinal data. They are particularly useful when repeated observations are collected from heterogeneous populations. Fitting an NLME model requires integrating over subject-specific random effects, an integral that is generally unavailable in closed form [@pinheiro1994topics]. Established estimation methods therefore rely on approximations. First-order conditional estimation with interaction (FOCEI) [@beal1980nonmem; @wang2008derivation] linearizes the model around each subject's conditional mode, whereas stochastic approximation expectation-maximization (SAEM) [@kuhn2005maximum] uses stochastic sampling within an iterative optimization scheme.
 
-Variational inference (VI) approaches the same integration problem through optimization. A tractable approximate posterior is fit by maximizing a lower bound on the marginal likelihood, the evidence lower bound (ELBO). Recent work has extended this framework to *amortized* VI for NLME models, in which a shared neural encoder maps a subject's data to subject-specific posterior parameters [@arruda2024amortized]. Once trained, the encoder can be reused across subjects and potentially across related datasets, making amortized inference attractive in settings where repeated fitting is required.
+Variational inference (VI) approaches the same integration problem through optimization. A tractable approximate posterior is fit by maximizing a lower bound on the marginal likelihood, the evidence lower bound (ELBO). Recent work has extended this framework to *amortized\** VI for NLME models, in which a shared neural encoder maps a subject's data to subject-specific posterior parameters [@arruda2024amortized]. Once trained, the encoder can be reused across subjects and potentially across related datasets, making amortized inference attractive in settings where repeated fitting is required.
 
 A central limitation of the standard ELBO is that an imperfect variational approximation can produce a loose bound and distorted posterior uncertainty. Recent applications of VI to NLME models have noted underestimation of variability parameters [@tarek2026fitting; @li2026variational; @baaz2026empirical], but the phenomenon has not been systematically characterized across sampling designs, posterior architectures, and variational families. In NLME models, this issue is especially important because between-subject variability is often scientifically consequential and can influence downstream decisions such as covariate modeling and random-effect selection. It is therefore necessary to determine not only whether the bias occurs, but also whether it can be corrected and whether corrected point estimates are sufficient for downstream likelihood-based inference.
 
@@ -71,7 +71,7 @@ $$
 \Omega = \operatorname{diag}(\omega_1^2, \ldots, \omega_p^2),
 $$
 
-where $\omega_j$ denotes the between-subject standard deviation for random effect $j$. Accordingly, reported quantities such as $\omega_{CL}$, $\omega_V$, and $\omega_{k_a}$ are standard deviations rather than variances. In prose, we use *between-subject variability* (BSV) when referring to this variability conceptually and reserve $\Omega$ for the covariance matrix.
+where $\omega_j$ denotes the between-subject standard deviation for random effect $j$. Accordingly, reported quantities such as $\omega_{CL}$, $\omega_V$, and $\omega_{k_a}$ are standard deviations rather than variances. In prose, we use *between-subject variability\** (BSV) when referring to this variability conceptually and reserve $\Omega$ for the covariance matrix.
 
 The population-level likelihood contribution of subject $i$ requires
 integrating the random effects out of the joint density
@@ -121,16 +121,15 @@ treating $K=1$ as the baseline against which the importance-weighting
 correction is measured. A post-hoc, higher-precision importance-sampling
 estimate of the marginal likelihood (independent of the training $K$) is
 also used to place fitted models on the same objective-function-value
-(OFV) scale conventionally reported by FOCEI/SAEM software, $\mathrm{OFV}
-= -2 \log p(y \mid \theta, \Omega, \sigma^2)$.
+(OFV) scale conventionally reported by FOCEI/SAEM software, $\mathrm{OFV} = -2 \log p(y \mid \theta, \Omega, \sigma^2)$.
 
 ### Variational Posterior Families
 
 We cross two independent design choices for the variational posterior.
 
-**Free vs. amortized.** A *free* posterior assigns each subject $i$ its
+**Free vs. amortized.** A *free\** posterior assigns each subject $i$ its
 own variational parameters $\lambda_i = (\mu_i, s_i)$, optimized
-independently subject by subject. An *amortized* posterior instead learns
+independently subject by subject. An *amortized\** posterior instead learns
 a single shared encoder $\lambda_i = g_\psi(y_i)$ mapping any subject's
 observed data directly to variational parameters, so that inference for a
 new subject requires only a forward pass through $g_\psi$ rather than a
@@ -156,7 +155,7 @@ allowing $q$ to represent non-Gaussian posterior shapes (skew,
 multimodality) that a diagonal Gaussian cannot. Crossing both design axes
 gives four posterior configurations (free/amortized $\times$
 Gaussian/flow); as detailed in the Results, one configuration (amortized
-+ flow) is unstable and excluded from primary results.
+\+ flow) is unstable and excluded from primary results.
 
 ### Training and Convergence
 
@@ -341,7 +340,7 @@ macOS.
 
 ### Standard-ELBO Variational Inference Underestimates Between-Subject Variability
 
-On the linear one-compartment model with known ground truth, standard-ELBO ($K=1$) fitting systematically underestimates between-subject variability under both free and amortized posteriors, with the bias substantially reduced by importance weighting at larger $K$ (@fig-phase0-omega-bias and @supptbl-phase0-headline). Structural fixed effects show much less dependence on $K$. Clearance and volume remain comparatively stable, whereas $k_a$ is consistently underestimated by a similar amount across $K$, indicating a persistent bias that is distinct from the strongly $K$-dependent behavior of the random-effect parameters. Residual-error estimates show greater $K$-dependence in some settings, consistent with partial compensation between residual and between-subject variability (@supptbl-phase0-fixed-effects; @suppfig-phase0-fixed-effects).
+On the linear one-compartment model with known ground truth, standard-ELBO ($K=1$) fitting systematically underestimates between-subject variability under both free and amortized posteriors, with the bias substantially reduced by importance weighting at larger $K$ (@fig-phase0-omega-bias and @supptbl-phase0-combined). Structural fixed effects show much less dependence on $K$. Clearance and volume remain comparatively stable, whereas $k_a$ is consistently underestimated by a similar amount across $K$, indicating a persistent bias that is distinct from the strongly $K$-dependent behavior of the random-effect parameters. Residual-error estimates show greater $K$-dependence in some settings, consistent with partial compensation between residual and between-subject variability (@supptbl-phase0-combined; @suppfig-phase0-fixed-effects).
 
 ![random-effect SD bias by $K$, shown separately for free and amortized posteriors
 under the Gaussian variational family. The dashed line marks zero bias.
@@ -356,7 +355,7 @@ constrains shrinks the most under standard-ELBO training. Independently, a
 richer variational family (normalizing flow) closes most of the gap that
 importance-weighting alone leaves at low $K$, with the free posterior
 under the flow family showing negligible bias even at $K=1$ in the dense
-design (@fig-phase1-grid and @supptbl-phase1-q2q4). Structural fixed-effect estimates are substantially less sensitive to $K$ across the same grid, whereas residual-error estimates show greater dependence on $K$ in some panels, consistent with redistribution of unexplained variability between residual error and between-subject random effects (@supptbl-phase1-q2q4-fixed-effects; @suppfig-phase1-fixed-effects).
+design (@fig-phase1-grid and @supptbl-phase1-combined). Structural fixed-effect estimates are substantially less sensitive to $K$ across the same grid, whereas residual-error estimates show greater dependence on $K$ in some panels, consistent with redistribution of unexplained variability between residual error and between-subject random effects (@supptbl-phase1-combined; @suppfig-phase1-fixed-effects).
 
 ![random-effect SD bias by $K$, faceted by sampling design (rows) and variational
 family (columns), with one line per posterior architecture in each
@@ -579,34 +578,22 @@ Structural fixed-effect and residual-error bias by $K$ across the Phase 1 dense/
 
 ### Supplementary Tables
 
-::: {#supptbl-phase0-headline}
-{{< include publication/tables/table_phase0_headline.md >}}
+::: {#supptbl-phase0-combined}
+{{< include publication/tables/table_phase0_combined.md >}}
 
-Mean relative bias (%) in random-effect standard deviations ($\omega$) by posterior architecture and $K$.
+Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations by posterior architecture and $K$. Values in parentheses are the standard deviation of relative bias across replicates.
 :::
 
-::: {#supptbl-phase0-fixed-effects}
-{{< include publication/tables/table_phase0_fixed_effects.md >}}
+::: {#supptbl-phase1-combined}
+{{< include publication/tables/table_phase1_combined.md >}}
 
-Mean relative bias (%) in structural fixed effects and residual error by posterior architecture and $K$. This companion table distinguishes persistent or residual-error bias from the strongly $K$-dependent bias in between-subject variability.
-:::
-
-::: {#supptbl-phase1-q2q4}
-{{< include publication/tables/table_phase1_q2q4.md >}}
-
-Mean relative bias (%) in random-effect standard deviations ($\omega$) by sampling design, posterior architecture, variational family, and $K$.
-:::
-
-::: {#supptbl-phase1-q2q4-fixed-effects}
-{{< include publication/tables/table_phase1_q2q4_fixed_effects.md >}}
-
-Mean relative bias (%) in structural fixed effects and residual error using the same grouping as the primary Phase 1 analysis.
+Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations by sampling design, posterior architecture, variational family, and $K$. Values in parentheses are the standard deviation of relative bias across replicates.
 :::
 
 ::: {#supptbl-phase1-q3-nonlinear}
 {{< include publication/tables/table_phase1_q3_nonlinear.md >}}
 
-Mean parameter estimates, ground-truth values, relative bias (%), and converged fraction for the Michaelis-Menten elimination model.
+Mean parameter estimates for the Michaelis-Menten elimination model at each $K$. Relative bias (%) is shown in parentheses; ground-truth values are provided for reference.
 :::
 
 ::: {#supptbl-realdata-k1-vs-khigh}
@@ -626,4 +613,3 @@ Aggregate importance-sampling effective sample size by fit-quality arm.
 
 $\Delta\mathrm{OFV}$ calibration summary: boundary fraction, number of negative $\Delta\mathrm{OFV}$ values, Kolmogorov-Smirnov statistic and p-value against $\chi^2_1$ for the strictly positive replicates, and empirical type-I error using the correct Self-Liang boundary-mixture cutoff.
 :::
-
