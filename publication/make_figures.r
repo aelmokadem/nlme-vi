@@ -239,20 +239,50 @@ savefig <- function(
 
 theme_manuscript <- function() {
 
+  # Shared publication typography across all figures.
+  # Explicit element sizes are used rather than relying only on base_size,
+  # because multi-panel figures otherwise tend to look visually smaller
+  # after scaling to manuscript width.
+
   theme_bw(
-    base_size = 11
+    base_size = 13
   ) +
     theme(
-      panel.grid.minor = element_blank(),
-      panel.grid.major = element_line(
-        linewidth = 0.25
+      axis.title = element_text(
+        size = 13
+      ),
+      axis.text = element_text(
+        size = 11
+      ),
+      legend.text = element_text(
+        size = 11
       ),
       legend.title = element_blank(),
+      legend.position = "top",
+      strip.text = element_text(
+        size = 12,
+        face = "bold"
+      ),
       strip.background = element_rect(
         fill = "white"
       ),
-      strip.text = element_text(
-        face = "bold"
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(
+        linewidth = 0.3
+      ),
+      legend.key.height = grid::unit(
+        0.7,
+        "lines"
+      ),
+      legend.key.width = grid::unit(
+        1.0,
+        "lines"
+      ),
+      plot.margin = margin(
+        8,
+        10,
+        8,
+        8
       )
     )
 }
@@ -371,18 +401,21 @@ fig_phase0 <- function(
     geom_hline(
       yintercept = 0,
       linetype = "dashed",
-      linewidth = 0.4
+      linewidth = 0.55
     ) +
     geom_errorbar(
       aes(
         ymin = mean - sem,
         ymax = mean + sem
       ),
-      width = 0.08
+      width = 0.08,
+      linewidth = 0.55
     ) +
-    geom_line() +
+    geom_line(
+      linewidth = 0.75
+    ) +
     geom_point(
-      size = 2
+      size = 2.8
     ) +
     scale_x_log10(
       breaks = sort(
@@ -413,8 +446,8 @@ fig_phase0 <- function(
     p,
     "fig_phase0_omega_bias",
     out_dir,
-    width = 5.5 * max(n_posteriors, 1),
-    height = 4.2
+    width = 10.5,
+    height = 4.8
   )
 }
 
@@ -459,6 +492,19 @@ fig_phase0_fixed_effects <- function(
       ),
       .groups = "drop"
     )
+  
+  plot_df <- plot_df %>%
+  mutate(
+    param = factor(
+      param,
+      levels = c(
+        "CL",
+        "V",
+        "ka",
+        "sigma"
+      )
+    )
+  )
 
   if (nrow(plot_df) == 0) {
 
@@ -483,18 +529,21 @@ fig_phase0_fixed_effects <- function(
     geom_hline(
       yintercept = 0,
       linetype = "dashed",
-      linewidth = 0.4
+      linewidth = 0.55
     ) +
     geom_errorbar(
       aes(
         ymin = mean - sem,
         ymax = mean + sem
       ),
-      width = 0.08
+      width = 0.08,
+      linewidth = 0.55
     ) +
-    geom_line() +
+    geom_line(
+      linewidth = 0.75
+    ) +
     geom_point(
-      size = 2
+      size = 2.8
     ) +
     scale_x_log10(
       breaks = sort(
@@ -528,8 +577,8 @@ fig_phase0_fixed_effects <- function(
     p,
     "fig_phase0_fixed_effects",
     out_dir,
-    width = 5.5 * max(n_posteriors, 1),
-    height = 4.2
+    width = 10.5,
+    height = 4.8
   )
 }
 
@@ -648,18 +697,21 @@ fig_phase1_grid <- function(
     geom_hline(
       yintercept = 0,
       linetype = "dashed",
-      linewidth = 0.4
+      linewidth = 0.55
     ) +
     geom_errorbar(
       aes(
         ymin = mean - sem,
         ymax = mean + sem
       ),
-      width = 0.08
+      width = 0.08,
+      linewidth = 0.55
     ) +
-    geom_line() +
+    geom_line(
+      linewidth = 0.75
+    ) +
     geom_point(
-      size = 2
+      size = 2.8
     ) +
     scale_x_log10(
       breaks = sort(
@@ -689,8 +741,8 @@ fig_phase1_grid <- function(
     p,
     "fig_phase1_grid",
     out_dir,
-    width = 5.5 * max(n_families, 1),
-    height = 4 * max(n_scenarios, 1)
+    width = 10.5,
+    height = 7.5
   )
 }
 
@@ -779,7 +831,19 @@ fig_phase1_grid_fixed_effects <- function(
       ),
       .groups = "drop"
     )
-
+  
+  plot_df <- plot_df %>%
+  mutate(
+    param = factor(
+      param,
+      levels = c(
+        "CL",
+        "V",
+        "ka",
+        "sigma"
+      )
+    )
+  )
 
   p <- ggplot(
     plot_df,
@@ -794,18 +858,21 @@ fig_phase1_grid_fixed_effects <- function(
     geom_hline(
       yintercept = 0,
       linetype = "dashed",
-      linewidth = 0.4
+      linewidth = 0.55
     ) +
     geom_errorbar(
       aes(
         ymin = mean - sem,
         ymax = mean + sem
       ),
-      width = 0.08
+      width = 0.08,
+      linewidth = 0.55
     ) +
-    geom_line() +
+    geom_line(
+      linewidth = 0.75
+    ) +
     geom_point(
-      size = 2
+      size = 2.8
     ) +
     scale_x_log10(
       breaks = sort(
@@ -848,10 +915,8 @@ fig_phase1_grid_fixed_effects <- function(
     p,
     "fig_phase1_grid_fixed_effects",
     out_dir,
-    width = 4.2 *
-      max(n_families * n_posteriors, 1),
-    height = 4 *
-      max(n_scenarios, 1)
+    width = 13.5,
+    height = 7.5
   )
 }
 
@@ -920,18 +985,21 @@ fig_nonlinear <- function(
     geom_hline(
       yintercept = 0,
       linetype = "dashed",
-      linewidth = 0.4
+      linewidth = 0.55
     ) +
     geom_errorbar(
       aes(
         ymin = mean - sem,
         ymax = mean + sem
       ),
-      width = 0.08
+      width = 0.08,
+      linewidth = 0.55
     ) +
-    geom_line() +
+    geom_line(
+      linewidth = 0.75
+    ) +
     geom_point(
-      size = 2
+      size = 2.8
     ) +
     scale_x_log10(
       breaks = sort(
@@ -955,8 +1023,8 @@ fig_nonlinear <- function(
     p,
     "fig_phase1_nonlinear",
     out_dir,
-    width = 6,
-    height = 4.5
+    width = 7.0,
+    height = 5.0
   )
 }
 
@@ -1084,8 +1152,8 @@ fig_realdata <- function(
     p,
     "fig_realdata_k1_vs_khigh",
     out_dir,
-    width = 5 * max(n_datasets, 1),
-    height = 4.2
+    width = 10.0,
+    height = 4.8
   )
 }
 
@@ -1177,21 +1245,21 @@ fig_deltaofv <- function(
         x = dofv,
         y = density
       ),
-      linewidth = 0.8,
+      linewidth = 0.9,
       inherit.aes = FALSE
     ) +
     geom_vline(
       xintercept = 0,
       linetype = "dashed",
-      linewidth = 0.4
+      linewidth = 0.55
     ) +
     facet_wrap(
       ~ condition,
       nrow = 1
     ) +
     labs(
-      x = "dOFV",
-      y = "density"
+      x = expression(Delta * "OFV"),
+      y = "Density"
     ) +
     theme_manuscript()
 
@@ -1204,8 +1272,8 @@ fig_deltaofv <- function(
     p,
     "fig_deltaofv_calibration",
     out_dir,
-    width = 6 * max(n_conditions, 1),
-    height = 4.5
+    width = ifelse(n_conditions > 1, 11.0, 7.0),
+    height = 5.0
   )
 }
 
@@ -1232,8 +1300,8 @@ fig_psis <- function(
       position = "identity"
     ) +
     labs(
-      x = "effective sample size",
-      y = "count",
+      x = "Effective sample size",
+      y = "Count",
       fill = NULL
     ) +
     theme_manuscript()
@@ -1243,8 +1311,8 @@ fig_psis <- function(
     p,
     "fig_psis_ess",
     out_dir,
-    width = 6,
-    height = 4.5
+    width = 7.0,
+    height = 5.0
   )
 }
 

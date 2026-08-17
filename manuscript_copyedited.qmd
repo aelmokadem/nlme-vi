@@ -42,7 +42,7 @@ In this work, we systematically characterize the dependence of between-subject v
 For a population of $N$ subjects, each subject $i$ contributes
 observations $y_{ij}$ at times $t_{ij}$, $j = 1, \ldots, n_i$, generated
 by a structural model $f$ evaluated at subject-specific parameters
-$\phi_i$ as in @eq-residual-error:
+$\phi_i$:
 
 $$
 y_{ij} = f(t_{ij}, \phi_i) \cdot \exp(\epsilon_{ij}), \qquad
@@ -50,7 +50,7 @@ y_{ij} = f(t_{ij}, \phi_i) \cdot \exp(\epsilon_{ij}), \qquad
 $$ {#eq-residual-error}
 
 a log-normal (multiplicative) residual error model, equivalently additive
-on the log scale (@eq-log-residual-error):
+on the log scale:
 
 $$
 \log y_{ij} = \log f(t_{ij}, \phi_i) + \epsilon_{ij}.
@@ -58,7 +58,7 @@ $$ {#eq-log-residual-error}
 
 Subject-specific parameters are linked to population-level fixed effects
 $\theta$ and subject-specific random effects $\eta_i$ through a
-log-normal population model (@eq-population-model),
+log-normal population model,
 
 $$
 \phi_i = \theta \odot \exp(\eta_i), \qquad
@@ -74,8 +74,7 @@ $$
 where $\omega_j$ denotes the between-subject standard deviation for random effect $j$. Accordingly, reported quantities such as $\omega_{CL}$, $\omega_V$, and $\omega_{k_a}$ are standard deviations rather than variances. In prose, we use *between-subject variability\** (BSV) when referring to this variability conceptually and reserve $\Omega$ for the covariance matrix.
 
 The population-level likelihood contribution of subject $i$ requires
-integrating the random effects out of the joint density
-(@eq-marginal-likelihood),
+integrating the random effects out of the joint density,
 
 $$
 p(y_i \mid \theta, \Omega, \sigma^2) =
@@ -88,7 +87,7 @@ estimation method must address.
 
 Variational inference replaces this integral with an optimization
 problem. For a tractable variational family $q_\lambda(\eta_i)$, the
-standard evidence lower bound (ELBO) satisfies @eq-elbo:
+standard evidence lower bound (ELBO) satisfies:
 
 $$
 \log p(y_i \mid \theta, \Omega, \sigma^2) \;\geq\;
@@ -102,8 +101,7 @@ and population parameters are estimated by maximizing
 $\sum_i \mathrm{ELBO}_i(\lambda_i)$ jointly over the variational
 parameters $\lambda_i$ and $(\theta, \Omega, \sigma^2)$. Because this
 bound need not be tight, we additionally use the $K$-sample
-importance-weighted ELBO (IW-ELBO) [@burda2016importance], defined in
-@eq-iw-elbo:
+importance-weighted ELBO (IW-ELBO) [@burda2016importance]:
 
 $$
 \mathrm{ELBO}_i^{(K)}(\lambda) =
@@ -144,7 +142,7 @@ constructed via a conditional normalizing flow
 [@rezende2015variational; @papamakarios2021normalizing]. In the flow
 case, a latent variable $z_i \sim \mathcal{N}(0, I)$ is transformed by an
 invertible, differentiable map $h_\psi$ conditioned on the base
-posterior's parameters (@eq-flow-density),
+posterior's parameters,
 
 $$
 \eta_i = h_\psi(z_i \,;\, \mu_i, s_i), \qquad
@@ -183,7 +181,7 @@ widely spaced observations, to test whether the standard-ELBO bias
 interacts with the identifiability of the sampling schedule itself.
 
 **Nonlinear tier.** A one-compartment intravenous bolus model with
-saturable, Michaelis-Menten elimination (@eq-michaelis-menten),
+saturable, Michaelis-Menten elimination,
 
 $$
 \frac{dA}{dt} = -\frac{V_{\max} \cdot (A/V)}{K_m + (A/V)}, \qquad
@@ -258,7 +256,7 @@ is valid for likelihood-ratio-based model comparison, we simulate data
 under a null hypothesis in which one random effect's variance is exactly
 zero, fit both a reduced model (without that random effect) and a full
 model (with it) to the identical simulated data, and compare the
-empirical distribution of @eq-delta-ofv,
+empirical distribution,
 
 $$
 \Delta\mathrm{OFV} = \mathrm{OFV}_{\text{reduced}} -
@@ -271,7 +269,7 @@ variance component against the boundary of its parameter space
 the boundary constraint means the reduced model's likelihood exceeds the
 full model's roughly half the time by chance alone, and the correct
 asymptotic reference distribution is not $\chi^2_1$ but the Self-Liang
-boundary mixture [@self1987asymptotic] in @eq-self-liang-mixture:
+boundary mixture [@self1987asymptotic]:
 
 $$
 \Delta\mathrm{OFV} \;\big|\; H_0 \;\sim\;
