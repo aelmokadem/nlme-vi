@@ -568,19 +568,19 @@ Future work should therefore focus on production-scale evaluation of the decoupl
 ::: {#supptbl-phase0-combined}
 {{< include publication/tables/table_phase0_combined.md >}}
 
-Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations by posterior architecture and $K$. Values in parentheses are the standard deviation of relative bias across replicates.
+Values are mean relative bias (%) with the standard deviation across replicates in parentheses. BSV, between-subject variability; RUV, residual unexplained variability. BSV parameters ($\omega$) are reported as standard deviations.
 :::
 
 ::: {#supptbl-phase1-dense}
 {{< include publication/tables/table_phase1_dense.md >}}
 
-Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations for the dense Phase 1 sampling design, by posterior architecture, variational family, and $K$. Values are mean relative bias with the standard deviation across replicates in parentheses.
+Values are mean relative bias (%) with the standard deviation across replicates in parentheses. BSV, between-subject variability; RUV, residual unexplained variability. BSV parameters ($\omega$) are reported as standard deviations.
 :::
 
 ::: {#supptbl-phase1-sparse}
 {{< include publication/tables/table_phase1_sparse.md >}}
 
-Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations for the sparse Phase 1 sampling design, by posterior architecture, variational family, and $K$. Values are mean relative bias with the standard deviation across replicates in parentheses.
+Values are mean relative bias (%) with the standard deviation across replicates in parentheses. BSV, between-subject variability; RUV, residual unexplained variability. BSV parameters ($\omega$) are reported as standard deviations.
 :::
 
 ::: {#supptbl-phase1-q3-nonlinear}

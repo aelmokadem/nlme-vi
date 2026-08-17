@@ -475,9 +475,9 @@ parameter_type <- function(param) {
     startsWith(
       as.character(param),
       "om_"
-    ) ~ "BSV SD",
-    as.character(param) == "sigma" ~ "Residual variability",
-    TRUE ~ "Structural fixed effect"
+    ) ~ "BSV",
+    as.character(param) == "sigma" ~ "RUV",
+    TRUE ~ "Fixed effect"
   )
 }
 
@@ -573,9 +573,9 @@ table_phase0_combined <- function(df) {
       parameter_type = factor(
         parameter_type,
         levels = c(
-          "Structural fixed effect",
-          "Residual variability",
-          "BSV SD"
+          "Fixed effect",
+          "RUV",
+          "BSV"
         )
       )
     ) %>%
@@ -670,9 +670,9 @@ table_phase1_by_design <- function(
       parameter_type = factor(
         parameter_type,
         levels = c(
-          "Structural fixed effect",
-          "Residual variability",
-          "BSV SD"
+          "Fixed effect",
+          "RUV",
+          "BSV"
         )
       )
     ) %>%

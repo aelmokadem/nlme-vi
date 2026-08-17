@@ -1,23 +1,23 @@
 | Posterior | Variational family | Parameter type | Parameter | $K=1$ | $K=8$ | $K=64$ |
 | --- | --- | --- | --- | --- | --- | --- |
-| amortized | Gaussian | Structural fixed effect | $CL$ | 1.37 (3.2) | 0.36 (3.16) | 0.145 (3.07) |
-| amortized | Gaussian | Structural fixed effect | $V$ | -0.693 (3.07) | -0.0815 (3.19) | -0.128 (3.29) |
-| amortized | Gaussian | Structural fixed effect | $k_a$ | -2.64 (6.22) | -0.922 (6.22) | 0.471 (6.57) |
-| amortized | Gaussian | Residual variability | $\sigma$ | 38.1 (9.86) | 12.4 (9.11) | 1.49 (9.08) |
-| amortized | Gaussian | BSV SD | $\omega_{CL}$ | -1.19 (8.63) | -2.1 (8.15) | -1.1 (7.57) |
-| amortized | Gaussian | BSV SD | $\omega_V$ | -81.9 (12.8) | -17.9 (24.7) | -2.83 (12.4) |
-| amortized | Gaussian | BSV SD | $\omega_{k_a}$ | -14.8 (26.9) | -25.1 (33) | -5.57 (22) |
-| free | Flow | Structural fixed effect | $CL$ | 0.161 (2.76) | -0.0955 (2.49) | -0.0965 (2.68) |
-| free | Flow | Structural fixed effect | $V$ | 0.237 (3.06) | 0.294 (2.88) | 0.0393 (3.11) |
-| free | Flow | Structural fixed effect | $k_a$ | -0.443 (5.85) | 0.181 (6.36) | 0.684 (6.39) |
-| free | Flow | Residual variability | $\sigma$ | 6.58 (8.71) | 5.06 (8.67) | 1.45 (8.57) |
-| free | Flow | BSV SD | $\omega_{CL}$ | -1.16 (7.51) | -0.899 (7.54) | -0.671 (7.63) |
-| free | Flow | BSV SD | $\omega_V$ | -0.926 (11) | -1.7 (12) | -0.019 (10.5) |
-| free | Flow | BSV SD | $\omega_{k_a}$ | -19.3 (20) | -18.1 (26.1) | -5.21 (20.9) |
-| free | Gaussian | Structural fixed effect | $CL$ | 0.88 (2.68) | 0.735 (2.72) | -0.16 (2.84) |
-| free | Gaussian | Structural fixed effect | $V$ | -1.02 (3.03) | -0.168 (3.37) | -0.0371 (3.16) |
-| free | Gaussian | Structural fixed effect | $k_a$ | -2.75 (6.18) | -0.723 (6.39) | 0.802 (6.44) |
-| free | Gaussian | Residual variability | $\sigma$ | 33.3 (9.43) | 11.1 (9.61) | 1.02 (9) |
-| free | Gaussian | BSV SD | $\omega_{CL}$ | 0.234 (7.83) | -1.71 (8.32) | -0.419 (7.39) |
-| free | Gaussian | BSV SD | $\omega_V$ | -83 (15.6) | -17.4 (26.4) | -2.65 (11.2) |
-| free | Gaussian | BSV SD | $\omega_{k_a}$ | -5.38 (26.7) | -24.3 (33.2) | -5.12 (21.3) |
+| amortized | Gaussian | Fixed effect | $CL$ | 1.37 (3.2) | 0.36 (3.16) | 0.145 (3.07) |
+| amortized | Gaussian | Fixed effect | $V$ | -0.693 (3.07) | -0.0815 (3.19) | -0.128 (3.29) |
+| amortized | Gaussian | Fixed effect | $k_a$ | -2.64 (6.22) | -0.922 (6.22) | 0.471 (6.57) |
+| amortized | Gaussian | RUV | $\sigma$ | 38.1 (9.86) | 12.4 (9.11) | 1.49 (9.08) |
+| amortized | Gaussian | BSV | $\omega_{CL}$ | -1.19 (8.63) | -2.1 (8.15) | -1.1 (7.57) |
+| amortized | Gaussian | BSV | $\omega_V$ | -81.9 (12.8) | -17.9 (24.7) | -2.83 (12.4) |
+| amortized | Gaussian | BSV | $\omega_{k_a}$ | -14.8 (26.9) | -25.1 (33) | -5.57 (22) |
+| free | Flow | Fixed effect | $CL$ | 0.161 (2.76) | -0.0955 (2.49) | -0.0965 (2.68) |
+| free | Flow | Fixed effect | $V$ | 0.237 (3.06) | 0.294 (2.88) | 0.0393 (3.11) |
+| free | Flow | Fixed effect | $k_a$ | -0.443 (5.85) | 0.181 (6.36) | 0.684 (6.39) |
+| free | Flow | RUV | $\sigma$ | 6.58 (8.71) | 5.06 (8.67) | 1.45 (8.57) |
+| free | Flow | BSV | $\omega_{CL}$ | -1.16 (7.51) | -0.899 (7.54) | -0.671 (7.63) |
+| free | Flow | BSV | $\omega_V$ | -0.926 (11) | -1.7 (12) | -0.019 (10.5) |
+| free | Flow | BSV | $\omega_{k_a}$ | -19.3 (20) | -18.1 (26.1) | -5.21 (20.9) |
+| free | Gaussian | Fixed effect | $CL$ | 0.88 (2.68) | 0.735 (2.72) | -0.16 (2.84) |
+| free | Gaussian | Fixed effect | $V$ | -1.02 (3.03) | -0.168 (3.37) | -0.0371 (3.16) |
+| free | Gaussian | Fixed effect | $k_a$ | -2.75 (6.18) | -0.723 (6.39) | 0.802 (6.44) |
+| free | Gaussian | RUV | $\sigma$ | 33.3 (9.43) | 11.1 (9.61) | 1.02 (9) |
+| free | Gaussian | BSV | $\omega_{CL}$ | 0.234 (7.83) | -1.71 (8.32) | -0.419 (7.39) |
+| free | Gaussian | BSV | $\omega_V$ | -83 (15.6) | -17.4 (26.4) | -2.65 (11.2) |
+| free | Gaussian | BSV | $\omega_{k_a}$ | -5.38 (26.7) | -24.3 (33.2) | -5.12 (21.3) |
