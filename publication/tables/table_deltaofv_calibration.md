@@ -1,3 +1,3 @@
 | Condition | Replicates | Boundary fraction (%) | Negative $\Delta$OFV | KS statistic | KS p-value | Type-I error (%) |
 | --- | --- | --- | --- | --- | --- | --- |
-| free | 100 | 25 | 22 | 0.2922 | 0 | 6 |
+| free | 100 | 25 | 22 | 0.2922 | <0.0001 | 6 |

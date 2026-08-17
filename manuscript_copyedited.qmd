@@ -121,7 +121,8 @@ treating $K=1$ as the baseline against which the importance-weighting
 correction is measured. A post-hoc, higher-precision importance-sampling
 estimate of the marginal likelihood (independent of the training $K$) is
 also used to place fitted models on the same objective-function-value
-(OFV) scale conventionally reported by FOCEI/SAEM software, $\mathrm{OFV} = -2 \log p(y \mid \theta, \Omega, \sigma^2)$.
+(OFV) scale conventionally reported by FOCEI/SAEM software, $\mathrm{OFV}
+= -2 \log p(y \mid \theta, \Omega, \sigma^2)$.
 
 ### Variational Posterior Families
 
@@ -355,7 +356,7 @@ constrains shrinks the most under standard-ELBO training. Independently, a
 richer variational family (normalizing flow) closes most of the gap that
 importance-weighting alone leaves at low $K$, with the free posterior
 under the flow family showing negligible bias even at $K=1$ in the dense
-design (@fig-phase1-grid and @supptbl-phase1-combined). Structural fixed-effect estimates are substantially less sensitive to $K$ across the same grid, whereas residual-error estimates show greater dependence on $K$ in some panels, consistent with redistribution of unexplained variability between residual error and between-subject random effects (@supptbl-phase1-combined; @suppfig-phase1-fixed-effects).
+design (@fig-phase1-grid and @supptbl-phase1-dense and @supptbl-phase1-sparse). Structural fixed-effect estimates are substantially less sensitive to $K$ across the same grid, whereas residual-error estimates show greater dependence on $K$ in some panels, consistent with redistribution of unexplained variability between residual error and between-subject random effects (@supptbl-phase1-dense and @supptbl-phase1-sparse; @suppfig-phase1-fixed-effects).
 
 ![random-effect SD bias by $K$, faceted by sampling design (rows) and variational
 family (columns), with one line per posterior architecture in each
@@ -584,10 +585,16 @@ Structural fixed-effect and residual-error bias by $K$ across the Phase 1 dense/
 Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations by posterior architecture and $K$. Values in parentheses are the standard deviation of relative bias across replicates.
 :::
 
-::: {#supptbl-phase1-combined}
-{{< include publication/tables/table_phase1_combined.md >}}
+::: {#supptbl-phase1-dense}
+{{< include publication/tables/table_phase1_dense.md >}}
 
-Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations by sampling design, posterior architecture, variational family, and $K$. Values in parentheses are the standard deviation of relative bias across replicates.
+Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations for the dense Phase 1 sampling design, by posterior architecture, variational family, and $K$. Values are mean relative bias with the standard deviation across replicates in parentheses.
+:::
+
+::: {#supptbl-phase1-sparse}
+{{< include publication/tables/table_phase1_sparse.md >}}
+
+Mean relative bias (%) in structural fixed effects, residual variability, and random-effect standard deviations for the sparse Phase 1 sampling design, by posterior architecture, variational family, and $K$. Values are mean relative bias with the standard deviation across replicates in parentheses.
 :::
 
 ::: {#supptbl-phase1-q3-nonlinear}

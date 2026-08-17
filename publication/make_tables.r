@@ -44,12 +44,24 @@
 # OUTPUT:
 #   publication/tables/*.csv
 #   publication/tables/*.md
+#
+# TABLE DESIGN:
+#   - Phase 0: one combined table for structural fixed effects, residual
+#     variability, and BSV SDs; K is shown across columns.
+#   - Phase 1: same compact combined layout, additionally stratified by
+#     sampling design, posterior architecture, and variational family.
+#   - Nonlinear: one row per parameter; each K cell shows estimate (bias %).
+#   - Real data: compact K=1 vs K=64 comparison.
+#   - Baseline comparison: pharmacometrics-style orientation with parameters
+#     as rows and methods as columns; median runtime shown as final row.
 # =============================================================================
 
 
 suppressPackageStartupMessages({
   library(dplyr)
   library(readr)
+  library(tidyr)
+  library(purrr)
   library(here)
 })
 
@@ -139,7 +151,6 @@ resolve_path <- function(path) {
     return(NULL)
   }
 
-  # Expand ~/... first.
   path <- path.expand(path)
 
   if (is_absolute_path(path)) {
@@ -201,6 +212,50 @@ try_load <- function(
   )
 
   df
+}
+
+
+# Approximately 3 significant digits, without padded trailing zeroes.
+# Examples:
+#   -1.160000 -> "-1.16"
+#   -19.30000 -> "-19.3"
+#   -83.00000 -> "-83"
+#    0.039978 -> "0.04"
+format_sig <- function(
+  x,
+  digits = 3
+) {
+
+  if (
+    length(x) == 0 ||
+    is.na(x) ||
+    !is.finite(x)
+  ) {
+    return("")
+  }
+
+  value <- signif(
+    as.numeric(x),
+    digits = digits
+  )
+
+  if (value == 0) {
+    return("0")
+  }
+
+  out <- format(
+    value,
+    scientific = FALSE,
+    trim = TRUE,
+    nsmall = 0
+  )
+
+  if (grepl("\\.", out)) {
+    out <- sub("0+$", "", out)
+    out <- sub("\\.$", "", out)
+  }
+
+  out
 }
 
 
@@ -272,8 +327,6 @@ save_table <- function(
   out_dir
 ) {
 
-  # Final publication-facing column names are applied only at save time so
-  # internal table-building code can continue to use stable snake_case names.
   df <- format_table_headers(df)
 
   out_dir <- resolve_path(out_dir)
@@ -327,20 +380,11 @@ save_table <- function(
 }
 
 
-
 # =============================================================================
 # Publication notation
 # =============================================================================
 
 format_param_label <- function(x) {
-
-  # Source CSVs retain implementation-facing names (e.g. om_CL).
-  # Publication outputs use standard pharmacometric notation:
-  #   Omega = covariance matrix (manuscript equations only)
-  #   omega_j = random-effect standard deviation reported in tables/figures
-  #
-  # Markdown math is used so included .md tables render consistently in
-  # Quarto HTML/PDF/DOCX output.
 
   labels <- c(
     "CL" = "$CL$",
@@ -356,12 +400,16 @@ format_param_label <- function(x) {
     "om_Km" = "$\\omega_{K_m}$"
   )
 
-  out <- unname(labels[as.character(x)])
+  out <- unname(
+    labels[
+      as.character(x)
+    ]
+  )
 
-  # Preserve any unrecognized parameter names rather than replacing them
-  # with NA, which keeps the script robust to future model extensions.
   missing <- is.na(out)
-  out[missing] <- as.character(x)[missing]
+
+  out[missing] <-
+    as.character(x)[missing]
 
   out
 }
@@ -370,38 +418,17 @@ format_param_label <- function(x) {
 format_param_column <- function(df) {
 
   if ("param" %in% names(df)) {
+
     df <- df %>%
       mutate(
-        param = format_param_label(param)
+        param = format_param_label(
+          param
+        )
       )
   }
 
   df
 }
-
-
-format_baseline_headers <- function(df) {
-
-  header_map <- c(
-    "CL" = "$CL$",
-    "V" = "$V$",
-    "ka" = "$k_a$",
-    "om_CL" = "$\\omega_{CL}$",
-    "om_V" = "$\\omega_V$",
-    "om_ka" = "$\\omega_{k_a}$",
-    "sigma" = "$\\sigma$"
-  )
-
-  new_names <- names(df)
-
-  for (old_name in names(header_map)) {
-    new_names[new_names == old_name] <- header_map[[old_name]]
-  }
-
-  names(df) <- new_names
-  df
-}
-
 
 
 format_table_headers <- function(df) {
@@ -410,20 +437,10 @@ format_table_headers <- function(df) {
     "posterior" = "Posterior",
     "scenario" = "Sampling design",
     "family" = "Variational family",
-    "K" = "$K$",
+    "parameter_type" = "Parameter type",
     "param" = "Parameter",
-    "mean_bias_pct" = "Mean bias (%)",
-    "sd_bias_pct" = "SD bias (%)",
-    "n_estimates" = "n",
-    "mean_estimate" = "Mean estimate",
     "truth" = "Truth",
-    "frac_converged" = "Fraction converged",
     "dataset" = "Dataset",
-    "K_low" = "$K_{low}$",
-    "estimate_K_low" = "Estimate at $K_{low}$",
-    "K_high" = "$K_{high}$",
-    "estimate_K_high" = "Estimate at $K_{high}$",
-    "pct_diff_low_vs_high" = "Difference, low vs high (%)",
     "condition" = "Condition",
     "n_reps" = "Replicates",
     "boundary_fraction_pct" = "Boundary fraction (%)",
@@ -436,42 +453,46 @@ format_table_headers <- function(df) {
     "median" = "Median",
     "min" = "Minimum",
     "max" = "Maximum",
-    "method" = "Method",
-    "runtime_s_mean" = "Runtime mean (s)",
-    "runtime_s_median" = "Runtime median (s)"
+    "method" = "Method"
   )
 
   new_names <- names(df)
 
   for (old_name in names(header_map)) {
-    new_names[new_names == old_name] <- header_map[[old_name]]
+    new_names[new_names == old_name] <-
+      header_map[[old_name]]
   }
 
   names(df) <- new_names
+
   df
 }
 
 
-format_method_labels <- function(df) {
+parameter_type <- function(param) {
 
-  if ("method" %in% names(df)) {
-    df <- df %>%
-      mutate(
-        method = recode(
-          as.character(method),
-          "foce" = "FOCEI",
-          "focei" = "FOCEI",
-          "saem" = "SAEM",
-          "vi" = "VI",
-          "vi_k1" = "VI, K=1",
-          "vi_k64" = "VI, K=64",
-          "TRUTH" = "Truth",
-          .default = as.character(method)
-        )
-      )
-  }
+  case_when(
+    startsWith(
+      as.character(param),
+      "om_"
+    ) ~ "BSV SD",
+    as.character(param) == "sigma" ~ "Residual variability",
+    TRUE ~ "Structural fixed effect"
+  )
+}
 
-  df
+
+format_family <- function(x) {
+
+  case_when(
+    tolower(
+      as.character(x)
+    ) == "gaussian" ~ "Gaussian",
+    tolower(
+      as.character(x)
+    ) == "flow" ~ "Flow",
+    TRUE ~ as.character(x)
+  )
 }
 
 
@@ -479,185 +500,210 @@ format_method_labels <- function(df) {
 # Table builders
 # =============================================================================
 
-table_phase0 <- function(df) {
+
+# -----------------------------------------------------------------------------
+# Phase 0
+#
+# One combined supplementary table:
+#   Posterior | Parameter type | Parameter | K=1 | K=8 | K=64
+#
+# Each K cell is:
+#   mean bias (SD)
+#
+# Replicate count is omitted because it is invariant within this experiment
+# and is better stated once in the caption.
+# -----------------------------------------------------------------------------
+
+table_phase0_combined <- function(df) {
 
   df %>%
-    filter(
-      startsWith(
-        as.character(param),
-        "om_"
+    mutate(
+      parameter_type = parameter_type(
+        param
       )
     ) %>%
     group_by(
       posterior,
-      K,
-      param
+      parameter_type,
+      param,
+      K
     ) %>%
     summarise(
-      mean_bias_pct = mean(
+      mean_bias = mean(
         rel_bias_pct,
         na.rm = TRUE
       ),
-      sd_bias_pct = sd(
+      sd_bias = sd(
         rel_bias_pct,
         na.rm = TRUE
-      ),
-      n_estimates = sum(
-        !is.na(rel_bias_pct)
       ),
       .groups = "drop"
     ) %>%
     mutate(
-      mean_bias_pct = round(
-        mean_bias_pct,
-        2
+      value = paste0(
+        map_chr(
+          mean_bias,
+          format_sig
+        ),
+        " (",
+        map_chr(
+          sd_bias,
+          format_sig
+        ),
+        ")"
       ),
-      sd_bias_pct = round(
-        sd_bias_pct,
-        2
+      K_label = paste0(
+        "$K=",
+        K,
+        "$"
+      )
+    ) %>%
+    select(
+      posterior,
+      parameter_type,
+      param,
+      K_label,
+      value
+    ) %>%
+    pivot_wider(
+      names_from = K_label,
+      values_from = value
+    ) %>%
+    mutate(
+      parameter_type = factor(
+        parameter_type,
+        levels = c(
+          "Structural fixed effect",
+          "Residual variability",
+          "BSV SD"
+        )
+      )
+    ) %>%
+    arrange(
+      posterior,
+      parameter_type,
+      param
+    ) %>%
+    mutate(
+      parameter_type = as.character(
+        parameter_type
       )
     ) %>%
     format_param_column()
 }
 
 
-table_phase0_fixed_effects <- function(df) {
+# -----------------------------------------------------------------------------
+# Phase 1 linear grid
+#
+# One combined supplementary table:
+#   Sampling design | Posterior | Family | Parameter type | Parameter
+#                   | K=1 | K=8 | K=64
+#
+# Each K cell is:
+#   mean bias (SD)
+#
+# Replicate count is omitted because it is invariant within this experiment.
+# -----------------------------------------------------------------------------
+
+table_phase1_by_design <- function(
+  df,
+  design
+) {
 
   df %>%
     filter(
-      !startsWith(
-        as.character(param),
-        "om_"
-      )
-    ) %>%
-    group_by(
-      posterior,
-      K,
-      param
-    ) %>%
-    summarise(
-      mean_bias_pct = mean(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-      sd_bias_pct = sd(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-      n_estimates = sum(
-        !is.na(rel_bias_pct)
-      ),
-      .groups = "drop"
+      scenario == design
     ) %>%
     mutate(
-      mean_bias_pct = round(
-        mean_bias_pct,
-        2
+      parameter_type = parameter_type(
+        param
       ),
-      sd_bias_pct = round(
-        sd_bias_pct,
-        2
-      )
-    ) %>%
-    format_param_column()
-}
-
-
-table_phase1_grid <- function(df) {
-
-  df %>%
-    filter(
-      startsWith(
-        as.character(param),
-        "om_"
-      ),
-      scenario %in% c(
-        "dense",
-        "sparse"
+      family = format_family(
+        family
       )
     ) %>%
     group_by(
-      scenario,
       posterior,
       family,
-      K,
-      param
+      parameter_type,
+      param,
+      K
     ) %>%
     summarise(
-      mean_bias_pct = mean(
+      mean_bias = mean(
         rel_bias_pct,
         na.rm = TRUE
       ),
-      sd_bias_pct = sd(
+      sd_bias = sd(
         rel_bias_pct,
         na.rm = TRUE
-      ),
-      n_estimates = sum(
-        !is.na(rel_bias_pct)
       ),
       .groups = "drop"
     ) %>%
     mutate(
-      mean_bias_pct = round(
-        mean_bias_pct,
-        2
+      value = paste0(
+        map_chr(mean_bias, format_sig),
+        " (",
+        map_chr(sd_bias, format_sig),
+        ")"
       ),
-      sd_bias_pct = round(
-        sd_bias_pct,
-        2
+      K_label = paste0(
+        "$K=",
+        K,
+        "$"
       )
     ) %>%
-    format_param_column()
-}
-
-
-table_phase1_grid_fixed_effects <- function(df) {
-
-  df %>%
-    filter(
-      !startsWith(
-        as.character(param),
-        "om_"
-      ),
-      scenario %in% c(
-        "dense",
-        "sparse"
-      )
-    ) %>%
-    group_by(
-      scenario,
+    select(
       posterior,
       family,
-      K,
-      param
+      parameter_type,
+      param,
+      K_label,
+      value
     ) %>%
-    summarise(
-      mean_bias_pct = mean(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-      sd_bias_pct = sd(
-        rel_bias_pct,
-        na.rm = TRUE
-      ),
-      n_estimates = sum(
-        !is.na(rel_bias_pct)
-      ),
-      .groups = "drop"
+    pivot_wider(
+      names_from = K_label,
+      values_from = value
     ) %>%
     mutate(
-      mean_bias_pct = round(
-        mean_bias_pct,
-        2
-      ),
-      sd_bias_pct = round(
-        sd_bias_pct,
-        2
+      parameter_type = factor(
+        parameter_type,
+        levels = c(
+          "Structural fixed effect",
+          "Residual variability",
+          "BSV SD"
+        )
+      )
+    ) %>%
+    arrange(
+      posterior,
+      family,
+      parameter_type,
+      param
+    ) %>%
+    mutate(
+      parameter_type = as.character(
+        parameter_type
       )
     ) %>%
     format_param_column()
 }
 
+
+# -----------------------------------------------------------------------------
+# Nonlinear tier
+#
+# Compact table:
+#   Parameter | Truth | K=1 | K=8 | K=64
+#
+# Each K cell is:
+#   mean estimate (mean bias %)
+#
+# Posterior/family/n/fraction-converged columns are omitted because they are
+# invariant in the production nonlinear analysis; state those facts once in
+# the supplementary-table caption.
+# -----------------------------------------------------------------------------
 
 table_nonlinear <- function(df) {
 
@@ -671,44 +717,72 @@ table_nonlinear <- function(df) {
 
   df %>%
     group_by(
-      posterior,
-      family,
-      K,
-      param
+      param,
+      K
     ) %>%
     summarise(
       mean_estimate = mean(
         estimate,
         na.rm = TRUE
       ),
-      truth = first(truth),
+      truth = first(
+        truth
+      ),
       mean_bias_pct = mean(
         rel_bias_pct,
-        na.rm = TRUE
-      ),
-      n = sum(
-        !is.na(rel_bias_pct)
-      ),
-      frac_converged = mean(
-        converged,
         na.rm = TRUE
       ),
       .groups = "drop"
     ) %>%
     mutate(
-      across(
-        c(
+      truth_display = map_chr(
+        truth,
+        format_sig
+      ),
+      value = paste0(
+        map_chr(
           mean_estimate,
-          truth,
-          mean_bias_pct,
-          frac_converged
+          format_sig
         ),
-        ~ round(.x, 3)
+        " (",
+        map_chr(
+          mean_bias_pct,
+          format_sig
+        ),
+        "%)"
+      ),
+      K_label = paste0(
+        "$K=",
+        K,
+        "$"
       )
+    ) %>%
+    select(
+      param,
+      truth_display,
+      K_label,
+      value
+    ) %>%
+    pivot_wider(
+      names_from = K_label,
+      values_from = value
+    ) %>%
+    rename(
+      truth = truth_display
     ) %>%
     format_param_column()
 }
 
+
+# -----------------------------------------------------------------------------
+# Real data
+#
+# Compact table:
+#   Dataset | Parameter | K=1 | K=64 | Difference (%)
+#
+# No redundant K_low/K_high columns.
+# Parameter estimates use approximately 3 significant digits.
+# -----------------------------------------------------------------------------
 
 table_realdata <- function(
   df,
@@ -775,22 +849,51 @@ table_realdata <- function(
       tibble(
         dataset = dataset_name,
         param = p,
-        K_low = k_lo,
-        estimate_K_low = lo_value,
-        K_high = k_hi,
-        estimate_K_high = hi_value,
-        pct_diff_low_vs_high = round(
-          pct_diff,
-          2
+        K1 = format_sig(
+          lo_value
+        ),
+        K64 = format_sig(
+          hi_value
+        ),
+        difference_pct = format_sig(
+          pct_diff
         )
       )
     }
   )
 
-  bind_rows(rows) %>%
+  out <- bind_rows(
+    rows
+  ) %>%
     format_param_column()
+
+  names(out)[
+    names(out) == "K1"
+  ] <- paste0(
+    "$K=",
+    k_lo,
+    "$"
+  )
+
+  names(out)[
+    names(out) == "K64"
+  ] <- paste0(
+    "$K=",
+    k_hi,
+    "$"
+  )
+
+  names(out)[
+    names(out) == "difference_pct"
+  ] <- "Difference (%)"
+
+  out
 }
 
+
+# -----------------------------------------------------------------------------
+# dOFV calibration
+# -----------------------------------------------------------------------------
 
 table_deltaofv_calibration <- function(
   df,
@@ -834,8 +937,6 @@ table_deltaofv_calibration <- function(
     ks_p <- NA_real_
   }
 
-  # Self-Liang 50:50 mixture.
-  # A 5% test corresponds to the 90th percentile of chi-square(1).
   correct_cutoff <- qchisq(
     0.90,
     df = 1
@@ -848,31 +949,43 @@ table_deltaofv_calibration <- function(
 
   tibble(
     condition = label,
-    n_reps = length(dofv),
-    boundary_fraction_pct = round(
-      frac_boundary,
-      1
+    n_reps = length(
+      dofv
+    ),
+    boundary_fraction_pct = format_sig(
+      frac_boundary
     ),
     n_negative_dofv = sum(
       dofv < 0
     ),
-    ks_stat = ifelse(
-      is.na(ks_stat),
-      NA_real_,
-      round(ks_stat, 4)
+    ks_stat = format_sig(
+      ks_stat,
+      digits = 4
     ),
-    ks_p = ifelse(
-      is.na(ks_p),
-      NA_real_,
-      round(ks_p, 4)
-    ),
-    type1_error_correct_test_pct = round(
-      type1_correct,
-      1
+    ks_p = if (
+      is.na(ks_p)
+    ) {
+      ""
+    } else if (
+      ks_p < 0.0001
+    ) {
+      "<0.0001"
+    } else {
+      format_sig(
+        ks_p,
+        digits = 4
+      )
+    },
+    type1_error_correct_test_pct = format_sig(
+      type1_correct
     )
   )
 }
 
+
+# -----------------------------------------------------------------------------
+# PSIS / ESS
+# -----------------------------------------------------------------------------
 
 table_psis <- function(df) {
 
@@ -907,11 +1020,24 @@ table_psis <- function(df) {
           min,
           max
         ),
-        ~ round(.x, 1)
+        ~ map_chr(
+          .x,
+          format_sig
+        )
       )
     )
 }
 
+
+# -----------------------------------------------------------------------------
+# VI vs FOCEI vs SAEM
+#
+# PMx-style orientation:
+#   Parameter | Truth | FOCEI | SAEM | VI, K=1 | VI, K=64
+#
+# Final row:
+#   Median runtime (s)
+# -----------------------------------------------------------------------------
 
 table_baseline_comparison <- function(df) {
 
@@ -928,13 +1054,77 @@ table_baseline_comparison <- function(df) {
     names(df)
   )
 
+
+  # Standardize runtime source.
+  if ("runtime_s" %in% names(df)) {
+
+    df <- df %>%
+      mutate(
+        runtime_s_std = runtime_s
+      )
+
+  } else if ("cpu_secs" %in% names(df)) {
+
+    df <- df %>%
+      mutate(
+        runtime_s_std = cpu_secs
+      )
+
+  } else {
+
+    df <- df %>%
+      mutate(
+        runtime_s_std = NA_real_
+      )
+  }
+
+
+  # Publication-facing method labels.
+  df <- df %>%
+    mutate(
+      method_display = case_when(
+        method %in% c(
+          "foce",
+          "focei",
+          "FOCE",
+          "FOCEI"
+        ) ~ "FOCEI",
+
+        method %in% c(
+          "saem",
+          "SAEM"
+        ) ~ "SAEM",
+
+        method %in% c(
+          "vi_K1",
+          "vi_k1",
+          "VI_K1",
+          "vi1"
+        ) ~ "VI, K = 1",
+
+        method %in% c(
+          "vi_K64",
+          "vi_k64",
+          "VI_K64",
+          "vi64"
+        ) ~ "VI, K = 64",
+
+        TRUE ~ as.character(
+          method
+        )
+      )
+    )
+
+
   estimates <- df %>%
     group_by(
-      method
+      method_display
     ) %>%
     summarise(
       across(
-        all_of(param_cols),
+        all_of(
+          param_cols
+        ),
         ~ mean(
           .x,
           na.rm = TRUE
@@ -943,83 +1133,167 @@ table_baseline_comparison <- function(df) {
       .groups = "drop"
     )
 
-  truth_cols <- paste0(
-    "truth_",
-    param_cols
+
+  estimates_long <- estimates %>%
+    pivot_longer(
+      cols = all_of(
+        param_cols
+      ),
+      names_to = "param",
+      values_to = "estimate"
+    ) %>%
+    pivot_wider(
+      names_from = method_display,
+      values_from = estimate
+    )
+
+
+  truth_values <- tibble(
+    param = param_cols
+  ) %>%
+    mutate(
+      Truth = map_dbl(
+        param,
+        function(p) {
+
+          truth_name <- paste0(
+            "truth_",
+            p
+          )
+
+          if (
+            truth_name %in% names(df)
+          ) {
+
+            value <- df[[truth_name]][[1]]
+
+            if (
+              length(value) == 1 &&
+              is.finite(value)
+            ) {
+              return(
+                as.numeric(
+                  value
+                )
+              )
+            }
+          }
+
+          NA_real_
+        }
+      )
+    )
+
+
+  out <- estimates_long %>%
+    left_join(
+      truth_values,
+      by = "param"
+    )
+
+
+  desired_methods <- c(
+    "Truth",
+    "FOCEI",
+    "SAEM",
+    "VI, K = 1",
+    "VI, K = 64"
   )
 
-  truth_cols <- truth_cols[
-    truth_cols %in% names(df)
-  ]
+  for (nm in desired_methods) {
 
-  if (length(truth_cols) > 0) {
-
-    truth_row <- tibble(
-      method = "TRUTH"
-    )
-
-    for (truth_name in truth_cols) {
-
-      param_name <- sub(
-        "^truth_",
-        "",
-        truth_name
-      )
-
-      truth_row[[param_name]] <-
-        df[[truth_name]][[1]]
+    if (
+      !nm %in% names(out)
+    ) {
+      out[[nm]] <- NA_real_
     }
-
-    estimates <- bind_rows(
-      estimates,
-      truth_row
-    )
   }
 
-  # Standardize runtime naming. New baseline files should use runtime_s;
-  # cpu_secs is accepted for backward compatibility with older outputs.
-  runtime_col <- if ("runtime_s" %in% names(df)) {
-    "runtime_s"
-  } else if ("cpu_secs" %in% names(df)) {
-    "cpu_secs"
-  } else {
-    NULL
-  }
 
-  if (!is.null(runtime_col)) {
-
-    runtime <- df %>%
-      group_by(
-        method
-      ) %>%
-      summarise(
-        runtime_s_mean = mean(
-          .data[[runtime_col]],
-          na.rm = TRUE
-        ),
-        runtime_s_median = median(
-          .data[[runtime_col]],
-          na.rm = TRUE
-        ),
-        .groups = "drop"
-      )
-
-    estimates <- estimates %>%
-      left_join(
-        runtime,
-        by = "method"
-      )
-  }
-
-  estimates %>%
+  # Format values as compact strings rather than padded decimals.
+  out <- out %>%
     mutate(
-      across(
-        where(is.numeric),
-        ~ round(.x, 4)
+      Parameter = format_param_label(
+        param
       )
     ) %>%
-    format_method_labels() %>%
-    format_baseline_headers()
+    select(
+      Parameter,
+      all_of(
+        desired_methods
+      )
+    ) %>%
+    mutate(
+      across(
+        all_of(
+          desired_methods
+        ),
+        ~ map_chr(
+          .x,
+          format_sig
+        )
+      )
+    )
+
+
+  runtime <- df %>%
+    filter(
+      is.finite(
+        runtime_s_std
+      )
+    ) %>%
+    group_by(
+      method_display
+    ) %>%
+    summarise(
+      runtime = median(
+        runtime_s_std,
+        na.rm = TRUE
+      ),
+      .groups = "drop"
+    )
+
+
+  runtime_row <- tibble(
+    Parameter = "Median runtime (s)",
+    Truth = "",
+    FOCEI = "",
+    SAEM = "",
+    `VI, K = 1` = "",
+    `VI, K = 64` = ""
+  )
+
+
+  if (
+    nrow(runtime) > 0
+  ) {
+
+    for (
+      i in seq_len(
+        nrow(runtime)
+      )
+    ) {
+
+      method_name <-
+        runtime$method_display[[i]]
+
+      if (
+        method_name %in%
+          names(runtime_row)
+      ) {
+
+        runtime_row[[method_name]] <- format_sig(
+          runtime$runtime[[i]]
+        )
+      }
+    }
+  }
+
+
+  bind_rows(
+    out,
+    runtime_row
+  )
 }
 
 
@@ -1030,9 +1304,21 @@ table_baseline_comparison <- function(df) {
 cat(
   paste0(
     "\n",
-    paste(rep("=", 72), collapse = ""),
+    paste(
+      rep(
+        "=",
+        72
+      ),
+      collapse = ""
+    ),
     "\nMANUSCRIPT TABLES\n",
-    paste(rep("=", 72), collapse = ""),
+    paste(
+      rep(
+        "=",
+        72
+      ),
+      collapse = ""
+    ),
     "\n"
   )
 )
@@ -1046,50 +1332,52 @@ cat(
 
 
 # -----------------------------------------------------------------------------
-# Phase 0
+# Phase 0 combined
 # -----------------------------------------------------------------------------
 
 df <- try_load(
   args$phase0_csv,
-  "Phase 0 (go/no-go)"
+  "Phase 0"
 )
 
 if (!is.null(df)) {
 
   save_table(
-    table_phase0(df),
-    "table_phase0_headline",
-    args$out
-  )
-
-  save_table(
-    table_phase0_fixed_effects(df),
-    "table_phase0_fixed_effects",
+    table_phase0_combined(
+      df
+    ),
+    "table_phase0_combined",
     args$out
   )
 }
 
 
 # -----------------------------------------------------------------------------
-# Phase 1 linear grid
+# Phase 1 linear grid combined
 # -----------------------------------------------------------------------------
 
 df_phase1 <- try_load(
   args$phase1_csv,
-  "Phase 1 grid (Q2/Q4, linear)"
+  "Phase 1 grid"
 )
 
 if (!is.null(df_phase1)) {
 
   save_table(
-    table_phase1_grid(df_phase1),
-    "table_phase1_q2q4",
+    table_phase1_by_design(
+      df_phase1,
+      "dense"
+    ),
+    "table_phase1_dense",
     args$out
   )
 
   save_table(
-    table_phase1_grid_fixed_effects(df_phase1),
-    "table_phase1_q2q4_fixed_effects",
+    table_phase1_by_design(
+      df_phase1,
+      "sparse"
+    ),
+    "table_phase1_sparse",
     args$out
   )
 }
@@ -1100,26 +1388,34 @@ if (!is.null(df_phase1)) {
 # -----------------------------------------------------------------------------
 
 nonlinear_path <- if (
-  !is.null(args$nonlinear_csv)
+  !is.null(
+    args$nonlinear_csv
+  )
 ) {
   args$nonlinear_csv
 } else {
   args$phase1_csv
 }
 
+
 df_nonlinear <- try_load(
   nonlinear_path,
-  "Phase 1 nonlinear (Q3)"
+  "Phase 1 nonlinear"
 )
+
 
 if (!is.null(df_nonlinear)) {
 
   has_nonlinear <- if (
-    "scenario" %in% names(df_nonlinear)
+    "scenario" %in%
+      names(
+        df_nonlinear
+      )
   ) {
 
     any(
-      df_nonlinear$scenario == "nonlinear",
+      df_nonlinear$scenario ==
+        "nonlinear",
       na.rm = TRUE
     )
 
@@ -1128,10 +1424,13 @@ if (!is.null(df_nonlinear)) {
     TRUE
   }
 
+
   if (has_nonlinear) {
 
     save_table(
-      table_nonlinear(df_nonlinear),
+      table_nonlinear(
+        df_nonlinear
+      ),
       "table_phase1_q3_nonlinear",
       args$out
     )
@@ -1139,7 +1438,7 @@ if (!is.null(df_nonlinear)) {
   } else {
 
     cat(
-      "[skip] Q3 nonlinear table: ",
+      "[skip] nonlinear table: ",
       "no 'nonlinear' scenario rows in the supplied file\n",
       sep = ""
     )
@@ -1153,6 +1452,7 @@ if (!is.null(df_nonlinear)) {
 
 realdata_tables <- list()
 
+
 df <- try_load(
   args$theoph_csv,
   "Real data: Theophylline"
@@ -1160,11 +1460,10 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  realdata_tables[[length(realdata_tables) + 1]] <-
-    table_realdata(
-      df,
-      "theophylline"
-    )
+  realdata_tables[[length(realdata_tables) + 1]] <- table_realdata(
+    df,
+    "theophylline"
+  )
 }
 
 
@@ -1175,18 +1474,23 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  realdata_tables[[length(realdata_tables) + 1]] <-
-    table_realdata(
-      df,
-      "warfarin"
-    )
+  realdata_tables[[length(realdata_tables) + 1]] <- table_realdata(
+    df,
+    "warfarin"
+  )
 }
 
 
-if (length(realdata_tables) > 0) {
+if (
+  length(
+    realdata_tables
+  ) > 0
+) {
 
   save_table(
-    bind_rows(realdata_tables),
+    bind_rows(
+      realdata_tables
+    ),
     "table_realdata_k1_vs_khigh",
     args$out
   )
@@ -1199,6 +1503,7 @@ if (length(realdata_tables) > 0) {
 
 calibration_tables <- list()
 
+
 df <- try_load(
   args$deltaofv_free_csv,
   "dOFV calibration: free posterior"
@@ -1206,11 +1511,10 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  calibration_tables[[length(calibration_tables) + 1]] <-
-    table_deltaofv_calibration(
-      df,
-      "free"
-    )
+  calibration_tables[[length(calibration_tables) + 1]] <- table_deltaofv_calibration(
+    df,
+    "free"
+  )
 }
 
 
@@ -1221,18 +1525,23 @@ df <- try_load(
 
 if (!is.null(df)) {
 
-  calibration_tables[[length(calibration_tables) + 1]] <-
-    table_deltaofv_calibration(
-      df,
-      "amortized"
-    )
+  calibration_tables[[length(calibration_tables) + 1]] <- table_deltaofv_calibration(
+    df,
+    "amortized"
+  )
 }
 
 
-if (length(calibration_tables) > 0) {
+if (
+  length(
+    calibration_tables
+  ) > 0
+) {
 
   save_table(
-    bind_rows(calibration_tables),
+    bind_rows(
+      calibration_tables
+    ),
     "table_deltaofv_calibration",
     args$out
   )
@@ -1251,7 +1560,9 @@ df <- try_load(
 if (!is.null(df)) {
 
   save_table(
-    table_psis(df),
+    table_psis(
+      df
+    ),
     "table_psis_ess",
     args$out
   )
@@ -1270,7 +1581,9 @@ df <- try_load(
 if (!is.null(df)) {
 
   save_table(
-    table_baseline_comparison(df),
+    table_baseline_comparison(
+      df
+    ),
     "table_baseline_comparison",
     args$out
   )
@@ -1280,9 +1593,17 @@ if (!is.null(df)) {
 cat(
   paste0(
     "\n",
-    paste(rep("=", 72), collapse = ""),
+    paste(
+      rep(
+        "=",
+        72
+      ),
+      collapse = ""
+    ),
     "\nDone. Tables written to ",
-    resolve_path(args$out),
+    resolve_path(
+      args$out
+    ),
     "/\n",
     "Skipped tables mean the corresponding source was not supplied or found.\n"
   )
