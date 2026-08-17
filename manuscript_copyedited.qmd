@@ -563,20 +563,6 @@ Future work should therefore focus on production-scale evaluation of the decoupl
 
 ## Supplementary Material
 
-### Supplementary Figures
-
-::: {#suppfig-phase0-fixed-effects}
-![](publication/figures/fig_phase0_fixed_effects.png)
-
-Structural fixed-effect and residual-error bias by $K$, shown separately for free and amortized posteriors in the Phase 0 Gaussian analysis. The dashed line marks zero bias; error bars show the standard error across replicates.
-:::
-
-::: {#suppfig-phase1-fixed-effects}
-![](publication/figures/fig_phase1_grid_fixed_effects.png)
-
-Structural fixed-effect and residual-error bias by $K$ across the Phase 1 dense/sparse sampling designs and variational families. The figure complements the primary random-effect SD analysis by showing parameter-specific sensitivity to $K$.
-:::
-
 ### Supplementary Tables
 
 ::: {#supptbl-phase0-combined}
@@ -619,4 +605,18 @@ Aggregate importance-sampling effective sample size by fit-quality arm.
 {{< include publication/tables/table_deltaofv_calibration.md >}}
 
 $\Delta\mathrm{OFV}$ calibration summary: boundary fraction, number of negative $\Delta\mathrm{OFV}$ values, Kolmogorov-Smirnov statistic and p-value against $\chi^2_1$ for the strictly positive replicates, and empirical type-I error using the correct Self-Liang boundary-mixture cutoff.
+:::
+
+### Supplementary Figures
+
+::: {#suppfig-phase0-fixed-effects}
+![](publication/figures/fig_phase0_fixed_effects.png)
+
+Structural fixed-effect and residual-error bias by $K$, shown separately for free and amortized posteriors in the Phase 0 Gaussian analysis. The dashed line marks zero bias; error bars show the standard error across replicates.
+:::
+
+::: {#suppfig-phase1-fixed-effects}
+![](publication/figures/fig_phase1_grid_fixed_effects.png)
+
+Structural fixed-effect and residual-error bias by $K$ across the Phase 1 dense/sparse sampling designs and variational families. The figure complements the primary random-effect SD analysis by showing parameter-specific sensitivity to $K$.
 :::
