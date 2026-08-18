@@ -29,7 +29,7 @@ Nonlinear mixed-effects (NLME) models are widely used to characterize population
 
 Nonlinear mixed-effects (NLME) models are widely used to characterize population-level trends and between-subject variability in pharmacokinetic, pharmacodynamic, and related longitudinal data. They are particularly useful when repeated observations are collected from heterogeneous populations. Fitting an NLME model requires integrating over subject-specific random effects, an integral that is generally unavailable in closed form [@pinheiro1994topics]. Established estimation methods therefore rely on approximations. First-order conditional estimation with interaction (FOCEI) [@beal1980nonmem; @wang2008derivation] linearizes the model around each subject's conditional mode, whereas stochastic approximation expectation-maximization (SAEM) [@kuhn2005maximum] uses stochastic sampling within an iterative optimization scheme.
 
-Variational inference (VI) approaches the same integration problem through optimization. A tractable approximate posterior is fit by maximizing a lower bound on the marginal likelihood, the evidence lower bound (ELBO). Recent work has extended this framework to *amortized\** VI for NLME models, in which a shared neural encoder maps a subject's data to subject-specific posterior parameters [@arruda2024amortized]. Once trained, the encoder can be reused across subjects and potentially across related datasets, making amortized inference attractive in settings where repeated fitting is required.
+Variational inference (VI) approaches the same integration problem through optimization. A tractable approximate posterior is fit by maximizing a lower bound on the marginal likelihood, the evidence lower bound (ELBO). Recent work has extended this framework to *amortized* VI for NLME models, in which a shared neural encoder maps a subject's data to subject-specific posterior parameters [@arruda2024amortized]. Once trained, the encoder can be reused across subjects and potentially across related datasets, making amortized inference attractive in settings where repeated fitting is required.
 
 A central limitation of the standard ELBO is that an imperfect variational approximation can produce a loose bound and distorted posterior uncertainty. Recent applications of VI to NLME models have noted underestimation of variability parameters [@tarek2026fitting; @li2026variational; @baaz2026empirical], but the phenomenon has not been systematically characterized across sampling designs, posterior architectures, and variational families. In NLME models, this issue is especially important because between-subject variability is often scientifically consequential and can influence downstream decisions such as covariate modeling and random-effect selection. It is therefore necessary to determine not only whether the bias occurs, but also whether it can be corrected and whether corrected point estimates are sufficient for downstream likelihood-based inference.
 
@@ -71,7 +71,7 @@ $$
 \Omega = \operatorname{diag}(\omega_1^2, \ldots, \omega_p^2),
 $$
 
-where $\omega_j$ denotes the between-subject standard deviation for random effect $j$. Accordingly, reported quantities such as $\omega_{CL}$, $\omega_V$, and $\omega_{k_a}$ are standard deviations rather than variances. In prose, we use *between-subject variability\** (BSV) when referring to this variability conceptually and reserve $\Omega$ for the covariance matrix.
+where $\omega_j$ denotes the between-subject standard deviation for random effect $j$. Accordingly, reported quantities such as $\omega_{CL}$, $\omega_V$, and $\omega_{k_a}$ are standard deviations rather than variances. In prose, we use *between-subject variability* (BSV) when referring to this variability conceptually and reserve $\Omega$ for the covariance matrix.
 
 The population-level likelihood contribution of subject $i$ requires
 integrating the random effects out of the joint density,
@@ -126,9 +126,9 @@ also used to place fitted models on the same objective-function-value
 
 We cross two independent design choices for the variational posterior.
 
-**Free vs. amortized.** A *free\** posterior assigns each subject $i$ its
+**Free vs. amortized.** A *free* posterior assigns each subject $i$ its
 own variational parameters $\lambda_i = (\mu_i, s_i)$, optimized
-independently subject by subject. An *amortized\** posterior instead learns
+independently subject by subject. An *amortized* posterior instead learns
 a single shared encoder $\lambda_i = g_\psi(y_i)$ mapping any subject's
 observed data directly to variational parameters, so that inference for a
 new subject requires only a forward pass through $g_\psi$ rather than a
@@ -154,7 +154,7 @@ allowing $q$ to represent non-Gaussian posterior shapes (skew,
 multimodality) that a diagonal Gaussian cannot. Crossing both design axes
 gives four posterior configurations (free/amortized $\times$
 Gaussian/flow); as detailed in the Results, one configuration (amortized
-\+ flow) is unstable and excluded from primary results.
++ flow) is unstable and excluded from primary results.
 
 ### Training and Convergence
 
@@ -406,8 +406,8 @@ amortized-flow instability described above, since no flow is involved,
 with bias in the random-effect standard deviations increasing rather than decreasing with $K$ and a
 non-trivial fraction of fits failing to converge within the training
 budget. Results using the amortized posterior on this model are excluded
-from the table and figure above and discussed further, with a working
-hypothesis, in the Discussion below.
+from the table and figure above and discussed further, with candidate
+explanations, in the Discussion below.
 
 ### Real-Data Validation
 
@@ -538,7 +538,7 @@ The companion fixed-effect analyses clarify the specificity of this result. Stru
 
 The results also show that posterior architecture and variational family cannot be treated as interchangeable implementation details. Free-posterior normalizing flows substantially reduce variability bias even at low $K$ in well-identified designs. In contrast, the amortized-flow configuration tested here was unstable across all values of $K$. A plausible explanation is that the amortized encoder output serves two roles simultaneously in this architecture: it parameterizes the flow's base distribution and also conditions the flow transformation, creating a moving optimization target. The amortized-flow architecture of @arruda2024amortized avoids this coupling by using a fixed standard-normal base distribution and reserving encoder-derived summaries for conditioning. A preliminary decoupled implementation following that design produced plausible estimates in a small-scale test, but it has not yet been evaluated at the scale required for inclusion as a formal result.
 
-A distinct instability was observed when the amortized Gaussian posterior was applied to the nonlinear Michaelis-Menten model. Because no flow was involved, this behavior cannot be explained by the same base-distribution coupling. One possibility is that a single shared encoder is more difficult to train when subject trajectories span qualitatively different dynamical regimes, including saturated, transitional, and approximately first-order elimination. This interpretation remains speculative and requires dedicated investigation.
+A distinct instability was observed when the amortized Gaussian posterior was applied to the nonlinear Michaelis-Menten model. Because no flow was involved, this behavior cannot be explained by the same base-distribution coupling. A diagnostic feature of this failure is that it worsens, rather than improves, with increasing $K$, the opposite of the pattern observed everywhere else in this work. This directionality is consistent with a known pathology of importance-weighted training objectives: increasing $K$ improves the gradient signal-to-noise ratio for global model parameters but degrades it specifically for inference-network parameters [@rainforth2018tighter], a problem the doubly-reparameterized gradient estimator was designed to address but which was not used in the amortized fits reported here. This may compound with a harder representation problem, since a single shared encoder must map subject trajectories spanning saturated, transitional, and approximately first-order elimination regimes onto variational parameters, a substantially more complex mapping than in the linear tier, and consistent with known limits on when amortized inference can match a per-subject (free) solution [@margossian2024amortized]. Both explanations remain unconfirmed; distinguishing an encoder-optimization failure from a representation-capacity limitation, for example via encoder gradient diagnostics across $K$ or a semi-amortized warm-start, is noted as future work below.
 
 The nonlinear analysis also highlighted an identifiability issue that should be distinguished from VI-specific approximation error. Allowing independent between-subject variability on both $V_{\max}$ and $K_m$ produced severe and persistent bias in the variability associated with $K_m$, even after extending training and redesigning the sampling window. Restricting between-subject variability to $V_{\max}$ and $V$, while retaining $K_m$ as a fixed effect, resolved the most severe instability. This behavior is consistent with the known correlation and identifiability challenges associated with simultaneous estimation of Michaelis-Menten parameters in saturable systems. A direct FOCEI/SAEM comparison on the same nonlinear model would provide a stronger cross-method confirmation of this interpretation.
 
@@ -552,7 +552,7 @@ The direct runtime comparison should be interpreted narrowly. On the simple anal
 
 Several limitations should be considered. First, thread counts were not explicitly matched between PyTorch and R/BLAS processes in the runtime benchmark, so differences in incidental parallelism may contribute to the observed timing differences. Second, the FOCEI/SAEM comparison was performed only for the linear model. Extending the benchmark to the Michaelis-Menten model would strengthen the interpretation of the nonlinear identifiability results. Third, this study evaluates one linear and one nonlinear structural model; generalization to multicomponent models, correlated random effects, covariate models, time-varying dosing, and other residual-error structures remains to be established. Fourth, the smaller residual miscalibration in the positive component of the amortized-posterior likelihood-ratio test remains unexplained.
 
-Future work should therefore focus on production-scale evaluation of the decoupled amortized-flow architecture, direct FOCEI/SAEM benchmarking on nonlinear models, explicit control of computational parallelism in runtime comparisons, and extension to more complex NLME structures. Because numerical integration dominated the cost of the nonlinear experiments, evaluating differentiable, purpose-built ODE solvers such as `DifferentialEquations.jl` [@rackauckas2017differentialequations], as used by @arruda2024amortized for more structurally complex models, may also be worthwhile provided that solver changes do not alter the statistical comparison being made.
+Future work should therefore focus on production-scale evaluation of the decoupled amortized-flow architecture, diagnostic investigation of the amortized-Gaussian nonlinear instability (encoder gradient variance across $K$, encoder capacity, and semi-amortized initialization), direct FOCEI/SAEM benchmarking on nonlinear models, explicit control of computational parallelism in runtime comparisons, and extension to more complex NLME structures. Because numerical integration dominated the cost of the nonlinear experiments, evaluating differentiable, purpose-built ODE solvers such as `DifferentialEquations.jl` [@rackauckas2017differentialequations], as used by @arruda2024amortized for more structurally complex models, may also be worthwhile provided that solver changes do not alter the statistical comparison being made.
 
 ## References
 
