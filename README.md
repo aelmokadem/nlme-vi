@@ -1,167 +1,71 @@
-# NLME Variational Inference: Omega-Shrinkage Project
+# NLME Variational Inference
 
-Characterizing and correcting the systematic underestimation of random-effect
-variances (Omega) by variational (ELBO-based) estimators in nonlinear
-mixed-effects models, and recovering a NONMEM-comparable likelihood from the
-fitted variational posterior.
+Characterizing and correcting underestimation of **between-subject variability (BSV)** by variational inference (VI) in nonlinear mixed-effects (NLME) models, and evaluating when importance-sampling-based marginal likelihoods support downstream likelihood-based inference.
 
-**If you read nothing else, read the Key Findings section below** — it
-summarizes what's actually been established across every phase, including
-one result (ΔOFV / free-vs-amortized) that changes how you should use part
-of this pipeline.
+The central result is simple: the standard evidence lower bound (**ELBO; $K=1$**) can substantially underestimate random-effect standard deviations, whereas a tighter importance-weighted objective (**IW-ELBO; $K>1$**) markedly reduces this bias. The repository tests that result across sampling designs, posterior architectures, variational families, real pharmacokinetic data, a nonlinear Michaelis-Menten model, and matched FOCEI/SAEM benchmarks.
+
+> **Terminology.** Throughout this repository, $\Omega$ denotes the random-effect covariance matrix and $\omega$ denotes a random-effect **standard deviation**. In prose and tables, **BSV** means between-subject variability and **RUV** means residual unexplained variability.
 
 ---
 
-## Key findings so far
+## Key findings
 
-1. **Plain-ELBO (K=1) VI systematically underestimates Omega**, reproduced
-   on known ground truth across dense/sparse simulated scenarios and real
-   data (Theophylline, warfarin). Importance-weighting (higher K)
-   substantially corrects it; a richer variational family (flow) corrects a
-   large part of it even at K=1, especially in well-identified (dense)
-   designs.
-2. **Sparse sampling roughly doubles the shrinkage** at matched K relative
-   to dense sampling — the identifiability mechanism behaves as predicted.
-3. **Amortized+flow is unstable at every tested K (1, 8, 64), not just at
-   K=1** — QC-flagged suspect-fit rates are comparable across all three
-   (8/7/6 flagged fits respectively in the production grid), and the single
-   worst failure in the entire grid (LL ≈ -784,500) occurred at K=64, not
-   K=1. Higher K does not rescue this combination; it changes the *shape*
-   of the failure (from occasional loud divergence to more frequent
-   convergence onto a stable, wrong, repeatable answer) without reducing
-   its frequency. **This is specifically a flow-family problem, not a
-   general amortized-posterior problem** — the amortized encoder's output
-   serves double duty as both the flow's base distribution and its
-   conditioning input, creating a moving-target optimization compounded by
-   representational redundancy between the two components. Amortized
-   posteriors under the plain Gaussian family show none of this (see
-   Finding 5) and are excluded from nothing. Amortized+flow is excluded
-   from all headline results at every K — see Known Issues.
-4. **Real data confirms the same signature on two independent datasets.**
-   Theophylline required fixing two real bugs first (a pre-dose-sample
-   filtering bug and a badly-scaled initial guess); warfarin required
-   fixing a third (dose extraction assumed a repeated-per-row covariate
-   column, which broke on warfarin's NONMEM-standard convention of dose
-   only appearing on the EVID=1 row) -- see the real-data section below.
-   Once fixed, both datasets show K=1 under-reporting Omega relative to
-   K=64, matching the simulated-data pattern (Theoph: Omega_V -18.2%;
-   warfarin: Omega_V -8.6%, Omega_ka -17.0%, Omega_CL flat, consistent
-   with CL being the most robustly-identified parameter throughout this
-   project). Warfarin additionally gives an external validation point: the
-   fitted fixed effects (CL~0.13 L/h, V~8.0 L) fall inside the 95%
-   confidence intervals of nlmixr2's own published FOCEi fit on the same
-   data (CL: 0.134 [0.125-0.142]; V: 7.96 [7.61-8.34]), despite this
-   project's simpler 1-compartment structural model versus nlmixr2's
-   two-step transit-absorption model -- real agreement on the parameters
-   that should agree, not just a directional match. Theophylline's
-   small-N (N=12) residual Omega bias is substantially explained by
-   classical small-sample MLE bias rather than a VI-specific failure
-   (tested via N-scaling: bias shrinks as N grows, holding K fixed).
-5. **dOFV computed from a FREE posterior is not reliable for
-   likelihood-ratio tests that change random-effect structure.** The free
-   posterior gives the more-complex model in a nested comparison extra
-   *per-subject* free parameters (not just the population-level parameter
-   nominally being tested), which classical LRT theory — including the
-   correct Self-Liang boundary-mixture reference — does not account for.
-   This inflates dOFV and miscalibrates the test (boundary fraction ~26-29%
-   against a target of ~50%; KS test p~0.0003-0.0005, decisively rejecting
-   the reference distribution at both n=100 and n=300).
-   **Switching to an amortized-GAUSSIAN posterior** (no flow -- see Finding
-   3 for why that combination is excluded regardless) **for this specific
-   use case corrects the boundary-mass component of the miscalibration**:
-   boundary fraction reaches ~48-50%, reproducible at both n=100 and n=300.
-   Confirmed as a real, converged-fit effect, not an artifact of
-   non-convergence or insufficient post-hoc likelihood evaluation precision
-   (both tested and ruled out as the explanation). **One caveat kept
-   deliberately unresolved**: a smaller residual deviation in the shape of
-   the non-boundary dOFV distribution persists under amortized-gaussian and
-   is detectable with enough replicates (n=300, KS p<0.0001 -- the n=100
-   "borderline pass" did not survive more data). A follow-up check found a
-   real correlation between this residual and how much the reduced/full
-   fits' sigma estimates diverge on the same data -- but sigma and the
-   likelihood are mechanically coupled by construction (sigma appears
-   directly inside the likelihood formula), so this correlation is more
-   likely a byproduct of the same overfitting event the boundary-mixture
-   theory already characterizes than a second, independent, previously-
-   unaccounted-for mechanism. Treat the boundary-mass correction as
-   established and the precise LRT p-value as still approximate; the source
-   of the residual gap remains genuinely open. See the
-   `nlme_vi_phase2_deltaofv.py` section below. This finding is scoped to
-   nested comparisons that change the number of random effects — it does
-   not affect the Omega-bias findings above, which never depended on
-   nested-model comparison.
-6. **The nonlinear (Michaelis-Menten) tier requires IIV restricted to
-   Vmax and V only, with Km as a pure fixed effect** — not a workaround,
-   but standard pharmacometric practice for MM models (Vmax/Km IIV
-   correlation is a known cross-method identifiability problem, not
-   VI-specific) and directly supported by this project's own data: across
-   four independent conditions (two sampling designs, two step budgets),
-   Omega_Vmax's bias stayed in a reasonable -10% to -16% range every time
-   while Omega_Km's never recovered from -77% to -93%, regardless of
-   training duration or design changes -- consistent with a genuine
-   structural instability, not undertraining or a fixable design flaw.
-   With Km's IIV removed (`OneCmtIVBolusMMNoKmRE`), fixed effects recover
-   cleanly and the same K=1-vs-K=64 shrinkage-and-correction signature seen
-   everywhere else in this project reproduces on Vmax and V's omegas.
-   **Confirmed at full production scale (N=60, 20 reps, K=1/8/64):
-   free+gaussian is clean and complete** -- Omega bias -1.79% (K=1) ->
-   -0.47% (K=8) -> -0.04% (K=64), closing almost entirely, even better
-   than the N=15 exploratory runs suggested (consistent with the
-   small-sample-bias mechanism established elsewhere in this project: the
-   correction gets cleaner as N grows). **This is the reportable
-   nonlinear-tier headline result.**
-   **Separately, and unexpectedly: amortized+gaussian failed
-   catastrophically on this tier** -- bias +230% (K=1) -> +374% (K=8) ->
-   +1168% (K=64), *worsening* with more K rather than correcting (26/120
-   fits non-converged, 33/120 QC-outlier-flagged, some fixed-effect
-   estimates reaching numerically absurd values, e.g. Km ~ 2*10^7). This
-   is a NEW, previously uncharacterized failure, distinct from
-   amortized+flow's known instability (Finding 3) -- no flow is involved
-   here at all, so that mechanism doesn't apply. Leading (untested)
-   hypothesis: the amortized encoder must learn one shared mapping from
-   raw trajectory shape to (mu, log_s) across all subjects at once; this
-   tier's design deliberately spans saturated/transition/first-order MM
-   regimes (required to identify Vmax -- see above), so subject
-   trajectories vary far more in shape than on the linear tier, which may
-   be a harder generalization problem for a shared encoder than the free
-   posterior's independently-optimized-per-subject approach. Not
-   investigated further -- free+gaussian already fully answers Q3.
-   **Important process note**: amortized+gaussian was never validated at
-   small scale on this tier before the production run -- every prior
-   exploratory check used `--posteriors free` only. This is a real gap in
-   following this project's own established discipline of testing cheap
-   before committing to an expensive run, worth remembering for any future
-   tier/combination.
+1. **Standard-ELBO VI underestimates BSV.** On simulated data with known ground truth, $K=1$ systematically underestimates random-effect SDs. Increasing $K$ to 8 or 64 substantially reduces the bias.
+
+2. **Sparse sampling worsens the effect.** At matched $K$, sparse designs produce greater BSV shrinkage than dense designs, consistent with weaker subject-level identifiability amplifying the variational approximation error.
+
+3. **A richer posterior family can reduce low-$K$ bias.** Free-posterior normalizing flows substantially reduce BSV bias in well-identified designs, including at $K=1$.
+
+4. **Amortized + flow is unstable in the architecture tested here.** The encoder output was used both to parameterize the flow base distribution and to condition the flow transformation. This configuration was unstable across $K=1,8,64$ and is excluded from primary results. A decoupled fixed-base design is a promising future direction but has not been evaluated at production scale.
+
+5. **The pattern reproduces on real data.** Theophylline and warfarin both show smaller random-effect SD estimates at $K=1$ than at $K=64$ on the same dataset. Warfarin fixed-effect estimates for clearance and volume are also compatible with published nlmixr2 FOCEI results despite differences in absorption-model structure.
+
+6. **The correction survives a genuinely nonlinear model.** In a one-compartment IV Michaelis-Menten model with BSV on $V_{\max}$ and $V$, free-Gaussian VI reproduces the $K=1$-to-$K=64$ correction. Preliminary experiments assigning BSV simultaneously to $V_{\max}$ and $K_m$ showed severe instability in the $K_m$ random effect, consistent with an identifiability limitation rather than a VI-specific effect.
+
+7. **Amortized-Gaussian VI has a separate nonlinear failure mode.** On the Michaelis-Menten tier, the amortized Gaussian posterior became less stable as $K$ increased. Because no flow is involved, this is distinct from the amortized-flow failure. Candidate explanations include degradation of inference-network gradient signal-to-noise under importance-weighted training and a harder amortized representation problem across qualitatively different nonlinear trajectories. These explanations remain hypotheses rather than established mechanisms.
+
+8. **Importance-sampling ESS is a useful fit diagnostic.** Aggregate importance-sampling effective sample size (ESS) clearly separates well-converged from deliberately under-trained fits on matched simulated data. Aggregate ESS is more useful than a fixed per-subject tail threshold.
+
+9. **Recovered likelihoods are not automatically valid for every LRT.** When nested models differ in random-effect structure, likelihood-ratio tests based on a free posterior are miscalibrated relative to the Self-Liang boundary-mixture reference. A shared amortized posterior substantially restores the expected boundary mass, although a smaller residual deviation in the positive component remains unresolved.
+
+10. **Corrected VI reaches FOCEI/SAEM-comparable accuracy on the matched linear benchmark.** Across 20 simulated datasets with $N=120$, VI at $K=64$ recovers every reported random-effect SD with bias below 1.2%, comparable to FOCEI and SAEM. VI at $K=1$ retains the characteristic BSV underestimation.
+
+11. **The runtime result is deliberately narrow.** On the simple analytic benchmark, mean process CPU time was approximately 11.25 s for FOCEI, 12.68 s for SAEM, 5.14 s for VI at $K=1$, and 16.50 s for VI at $K=64$. Thus, correcting the VI bias is not computationally free: $K=64$ VI was slower than FOCEI/SAEM on this simple model. Thread counts were not explicitly matched between PyTorch and R/BLAS, so this is not intended as a general speed benchmark.
 
 ---
 
 ## Repository layout
 
-```
+```text
 .
-├── nlmevi_core.py                    shared core: models, posteriors,
-│                                      objectives, adaptive trainer
-├── nlme_vi_phase0.py                 Phase 0: go/no-go
-├── nlme_vi_phase1.py                 Phase 1: Q1-Q4 stress tests
-├── commands.sh                       canonical run commands, callable by name
+├── nlmevi_core.py
+├── nlme_vi_phase0.py
+├── nlme_vi_phase1.py
+├── commands.sh
+├── manuscript_copyedited.qmd
+├── references.bib
 │
 ├── phase2/
-│   ├── nlme_vi_phase2_deltaofv.py    dOFV / LRT calibration (see Key Findings)
-│   ├── nlme_vi_phase2_psis.py        PSIS/ESS diagnostic validation
-│   ├── baseline_nlmixr2.R            FOCEI/SAEM fit (R side -- see status below)
-│   ├── nlme_vi_phase2_baselines.py   orchestrator: VI vs FOCEI vs SAEM
-│   └── nlme_vi_phase2_realdata.py    real-data fits (Theophylline, warfarin)
+│   ├── nlme_vi_phase2_deltaofv.py
+│   ├── nlme_vi_phase2_psis.py
+│   ├── baseline_nlmixr2.R
+│   ├── nlme_vi_phase2_baselines.py
+│   └── nlme_vi_phase2_realdata.py
 │
-└── publication/
-    ├── make_tables.py                 DONE -- manuscript tables from result CSVs
-    ├── make_figures.py                DONE -- manuscript figures, no captions baked in
-    └── reproduce.sh                   not yet built
+├── publication/
+│   ├── make_tables.R
+│   ├── make_figures.R
+│   ├── tables/
+│   └── figures/
+│
+└── outputs/
 ```
 
-**`nlmevi_core.py` must be present in the same directory as whichever script
-you're running.** Symlink it into `phase2/` once:
+`nlmevi_core.py` contains the shared models, posterior implementations, IW-ELBO objective, importance-sampling likelihood evaluation, device handling, and adaptive training machinery.
+
+If the Phase 2 scripts import the core module from inside `phase2/`, create the symlink once:
+
 ```bash
-cd /path/to/nlme-vi
 ln -s ../nlmevi_core.py phase2/nlmevi_core.py
 ```
 
@@ -170,638 +74,335 @@ ln -s ../nlmevi_core.py phase2/nlmevi_core.py
 ## Requirements
 
 ### Python
-```
-pip install torch numpy pandas scipy matplotlib
-pip install rdatasets   # for the real Theophylline data loader
+
+```bash
+pip install torch numpy pandas scipy matplotlib rdatasets
 ```
 
-### R (only for `phase2/baseline_nlmixr2.R` and the R-calling half of
-`phase2/nlme_vi_phase2_baselines.py`)
+### R
+
+R is used for FOCEI/SAEM benchmarking through `nlmixr2` and for the manuscript-facing table and figure pipeline.
+
 ```r
-install.packages(c("nlmixr2", "dplyr", "readr", "nlmixr2data"))
+install.packages(c(
+  "nlmixr2", "nlmixr2data",
+  "dplyr", "readr", "tidyr", "purrr", "stringr",
+  "ggplot2", "patchwork", "here"
+))
 ```
 
-**R environment status: unresolved.** `rxode2`'s model-compilation step
-fails with a generic "Error building the model" wrapper on the development
-machine (macOS 26 beta, R 4.6 via `rig`, freshly-reinstalled Xcode CLT).
-Ruled out: missing/broken Command Line Tools (`R CMD SHLIB` on a trivial
-file succeeds), Homebrew hijacking R (confirmed R resolves correctly to
-CRAN 4.6 via `which R`/`rig list`), a PATH mismatch between terminal apps
-(Positron vs. plain Terminal were resolving different R installs --
-resolved, both now point at CRAN 4.6). **Not yet tried:** rebuilding
-`rxode2`/`nlmixr2est` from source against the refreshed toolchain
-(`install.packages(c("rxode2","nlmixr2est"), type="source")`), or testing
-under R 4.5 via `rig` (R 4.6 + a beta macOS is about as bleeding-edge a
-pairing as exists, and this is a live, untested hypothesis). **This does
-not block anything else in the repo** -- see Key Finding 5 above, which
-was established without needing FOCE/SAEM at all. If/when this gets
-resolved, `phase2/nlme_vi_phase2_baselines.py`'s Python-side orchestration
-is already fully validated via `--dry-run` and ready to go.
+The completed benchmark reported in the manuscript used R 4.5.3, nlmixr2 7.0.1, nlmixr2est 7.0.2, and rxode2 5.1.6 on macOS (aarch64-apple-darwin20).
 
 ---
 
-## `nlmevi_core.py` — shared core
+## Core implementation: `nlmevi_core.py`
 
-Not run directly. Contains everything every other script imports:
-
-| Component | What it is |
+| Component | Purpose |
 |---|---|
-| `OneCmtOral` | Linear-tier model: 1-cmt oral PK, analytic solution (no ODE solver) |
-| `OneCmtIVBolusMM` | Nonlinear-tier model: Michaelis-Menten elimination, RK4-integrated |
-| `FreePosterior` / `AmortizedPosterior` | Gaussian variational families (per-subject / encoder-shared) |
-| `FlowPosterior` (+ `AffineCoupling`, `ConditionalFlow`) | Conditional normalizing-flow variational family |
-| `make_posterior(kind, family, ...)` | Dispatches to the right posterior class |
-| `iw_elbo` | Importance-weighted ELBO, with `mc_reps` for gradient-variance reduction at small K |
-| `is_marginal_loglik` | Post-hoc importance-sampling marginal likelihood + ESS/PSIS-proxy diagnostics. `K` param (default 4000) controls evaluation precision. |
-| `train_to_convergence` | Adaptive stopping: trains until the omega estimates themselves plateau |
-| `fit_model` | **The** trainer every script calls — adaptive stopping + best-checkpoint tracking baked in. Returns `(theta, q, ll, ess, top_share, n_steps_run, converged, cpu_secs)` -- an 8-tuple; unpack accordingly. |
-| `set_device(device_str)` | Resolves `"cpu"`/`"auto"`/`"cuda"`/`"mps"` and updates the module-level `DEVICE` everything else reads at call time. **`mps` (Apple Silicon GPU) raises immediately, on purpose**: MPS does not support float64, a permanent Metal backend limitation, and this project requires float64 throughout (importance weights at high K span many orders of magnitude; float32 would silently corrupt the K=64 arm the corrected results depend on). CPU is the only supported option on Apple Silicon for this codebase -- confirmed by hitting the failure directly, not assumed. |
+| `OneCmtOral` | Linear one-compartment oral PK model with analytic solution |
+| `OneCmtIVBolusMM` | Original Michaelis-Menten model implementation |
+| `OneCmtIVBolusMMNoKmRE` | Primary nonlinear model; BSV on $V_{\max}$ and $V$, not $K_m$ |
+| `FreePosterior` | Per-subject Gaussian variational parameters |
+| `AmortizedPosterior` | Shared encoder producing subject-level variational parameters |
+| `FlowPosterior` | Conditional normalizing-flow posterior |
+| `AffineCoupling` / `ConditionalFlow` | Flow transformation machinery |
+| `iw_elbo` | $K$-sample importance-weighted ELBO |
+| `is_marginal_loglik` | Post-hoc importance-sampling marginal likelihood and weight diagnostics |
+| `train_to_convergence` | Adaptive convergence based on stabilization of random-effect SD estimates |
+| `fit_model` | Common fitting interface used by downstream experiments |
+| `set_device` | CPU/CUDA/MPS device handling |
 
-Design rule every script downstream follows: **one seed generates one
-dataset; every method arm in a comparison reads byte-identical data.**
+### Training $K$ vs evaluation $K$
 
-`fit_model` signature highlights worth knowing:
-- **`eval_k`** (default 4000): passed through to `is_marginal_loglik`'s
-  evaluation K. Distinct from the training `K` argument -- raising this
-  does not retrain, only re-evaluates the likelihood of the already-fitted
-  posterior more precisely.
-- **`cpu_secs`** returned via `time.process_time()`, not wall-clock. Immune
-  to OS sleep and largely immune to other-process contention -- this is the
-  number any VI-vs-FOCEI/SAEM speed claim should be built on, not
-  wall-clock `secs`.
-- **Best-checkpoint restoration** (always on): every 250 steps, if the loss
-  improved, the parameters are snapshotted; the best snapshot is restored
-  at the end regardless of where training ended up. Guards against a fit
-  wandering into a bad basin and getting numerically stuck there while
-  still satisfying the plateau test.
+The **training $K$** controls the IW-ELBO used to estimate model and variational parameters. The **evaluation $K$** (`eval_k`) controls the number of importance samples used after training to estimate the marginal likelihood more precisely. Increasing `eval_k` does **not** retrain the model.
+
+### Device support
+
+The project uses float64 throughout because high-$K$ importance weights can span many orders of magnitude. Apple's MPS backend does not support the required float64 operations, so Apple Silicon runs should use CPU. CUDA remains the appropriate GPU target where compatible hardware is available.
 
 ---
 
-## Phase 0 — `nlme_vi_phase0.py`
+## Experimental design rule
 
-**Question:** on a model with known ground truth, does plain-ELBO (K=1)
-variational fitting systematically underestimate Omega, and does
-importance-weighting (higher K) fix it?
+> **One seed generates one dataset, and every method arm in a comparison is fit to that byte-identical dataset.**
 
-**Execution style:** cell-based (`# %%` markers), no `if __name__` guard --
-runnable top-to-bottom as a script or cell-by-cell in VSCode/Spyder.
-
-```bash
-python nlme_vi_phase0.py --quick              # ~1-2 min smoke test
-python nlme_vi_phase0.py                       # full run
-```
-
-| Flag | Default | Meaning |
-|---|---|---|
-| `--quick` | off | tiny scale, 2 reps, for a fast sanity pass |
-| `--reps` | 8 | replicates per (posterior, K) cell |
-| `--subjects` | 120 | N per replicate |
-| `--max-steps` | 25000 | safety cap for adaptive training |
-| `--out` | `/mnt/user-data/outputs` | output directory |
-
-Runs four sanity checks first (analytic-vs-ODE agreement, K=1 IW-ELBO ==
-plain ELBO, IW-ELBO monotone in K, IS marginal likelihood matches a
-closed-form case). Outputs `phase0_results.csv`, `phase0_omega_bias.png`,
-and a printed go/no-go verdict, plus a `cpu_secs`/`secs` runtime table.
+Do not regenerate data independently for different $K$, posterior, family, or estimation-method arms.
 
 ---
 
-## Phase 1 — `nlme_vi_phase1.py`
+## Phase 0: establish the BSV-bias signal
 
-**Four follow-up questions:**
-
-| | Question | How |
-|---|---|---|
-| Q1 | Is the K=1 bias converged, or just under-trained? | `--converge-check` |
-| Q2 | Does sparser sampling worsen shrinkage? | `--scenarios dense,sparse` |
-| Q3 | Does the effect survive a nonlinear model? | `--scenarios ...,nonlinear` |
-| Q4 | Does a richer family close what K alone leaves? | `--families gaussian,flow` |
-
-**Execution style: this script now ALSO uses `if __name__ == "__main__":`**,
-same hard requirement and reason as `nlme_vi_phase2_deltaofv.py` (not a
-style choice): `--n-workers > 1` uses `ProcessPoolExecutor`, and macOS's
-`spawn` start method re-imports this file in every worker process --
-without the guard, every worker would re-parse argv and re-run the entire
-grid recursively. Function/class definitions above the guard are still
-fine to run cell-by-cell; only the final execution block needs a full
-script invocation.
+`nlme_vi_phase0.py` asks whether standard-ELBO VI underestimates BSV and whether increasing $K$ corrects it.
 
 ```bash
-# Q1 -- run this before trusting any bias number from any script in this repo
-python nlme_vi_phase1.py --converge-check --converge-steps 25000
-
-# Q2 + Q4, gaussian family, both posteriors (amortized+gaussian is stable)
-python nlme_vi_phase1.py --scenarios dense,sparse --families gaussian \
-    --posteriors free,amortized --K 1,8,64 --reps 30
-
-# Q4, flow family -- FREE POSTERIOR ONLY (see Known Issues re: amortized+flow)
-python nlme_vi_phase1.py --scenarios dense,sparse --families flow \
-    --posteriors free --K 1,8,64 --reps 30
-
-# Q3, nonlinear tier -- production scale, parallelized (see cost estimate
-# below; expect several hours even with parallelism)
-caffeinate -i python nlme_vi_phase1.py --scenarios nonlinear --families gaussian \
-    --posteriors free,amortized --nl-reps 20 --nl-subjects 60 --mm-dt 0.1 \
-    --n-workers 9 --out .
+python nlme_vi_phase0.py --quick
+python nlme_vi_phase0.py
 ```
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `--scenarios` | `dense,sparse` | comma list: `dense`, `sparse`, `nonlinear` |
-| `--families` | `gaussian,flow` | comma list |
-| `--posteriors` | `free,amortized` | comma list |
-| `--K` | `1,8,64` | comma list |
-| `--device` | `cpu` | `cpu`/`auto`/`cuda`/`mps` -- `mps` raises immediately (see core-module table above), `cpu` is the only supported option on Apple Silicon |
-| `--n-workers` | 1 | fits are fully independent (each rebuilds its own model+data from a seed); run this many in parallel processes. Try `os.cpu_count()-1`. Default 1 = original sequential behavior, unchanged. Only affects the Q2-4 grid, not `--converge-check`. |
-| `--mc-reps-k1` | 8 | gradient-variance reduction for flow+K=1 |
-| `--max-steps` | 25000 | safety cap |
-| `--nl-reps` / `--nl-steps` / `--nl-subjects` / `--mm-dt` | 4/1500/60/0.1 | nonlinear-tier overrides |
+The full analysis evaluates free and amortized Gaussian posteriors across $K=1,8,64$ on the linear one-compartment oral model.
 
-**Built-in QC**: `summarize_v2` automatically flags fits whose marginal LL
-is a wild outlier relative to sibling arms on the same replicate (catches
-"converged per the plateau test but landed somewhere badly wrong" --
-exactly the amortized+flow failure mode), and prints both an unfiltered and
-a QC-filtered bias table so you can see the difference. A separate "Fixed
-effects + sigma" table is also printed alongside the omega table --
-generic across scenarios (works whether the scenario's parameter names are
-`CL/V/ka`, as in dense/sparse, or `Vmax/Km/V`, as in nonlinear), since
-fixed-effect bias was previously computed but not actually shown in the
-console output for anything other than Phase 0.
-
-**Nonlinear tier specifics** (see Key Finding 6 for the full story): the
-default model is `OneCmtIVBolusMMNoKmRE` (IIV on Vmax and V only, Km
-fixed) at dose=300 with a 60h observation window -- both settings are
-load-bearing, not arbitrary, and are baked into `get_scenario()` rather
-than exposed as flags, since a shorter/cheaper design was tested and found
-to break Km's identifiability (not just undertrained -- genuinely
-uninformative data in that regime). **Cost estimate for the production
-command above**, computed from real measured timing (119 CPU-sec per 9000
-steps at N=15/dt=0.5, scaled to N=60/dt=0.1): roughly 5-24 hours with
-9-way parallelism depending on how many steps convergence actually takes
-at N=60 (the one genuine unknown -- launch with `caffeinate` and check
-back rather than trying to predict it more precisely).
-
-**Outputs:** `phase1_results.csv`, `phase1_grid.png`, console summary
-including Q2/Q3/Q4 tables and a `cpu_secs` runtime table with a
-flow/gaussian cost ratio.
+Primary result: BSV is strongly $K$-dependent, whereas structural fixed effects are much less sensitive. In particular, $k_a$ remains somewhat underestimated across $K$, showing that increasing $K$ is not a generic correction for every form of parameter bias.
 
 ---
 
-## Phase 2
+## Phase 1: stress tests
 
-Everything in `phase2/` requires `nlmevi_core.py` symlinked into that
-directory (see Requirements above).
-
-### `nlme_vi_phase2_realdata.py` — does the signature show up on real data?
-
-No ground truth on real data, so the check is: does K=1 report visibly
-smaller Omega than K=high on the *same* dataset.
+`nlme_vi_phase1.py` evaluates dense vs sparse sampling, Gaussian vs flow families, free vs amortized posterior architectures, and nonlinear Michaelis-Menten elimination.
 
 ```bash
-# Theophylline -- loads directly, no file needed
-uv run phase2/nlme_vi_phase2_realdata.py --dataset theoph --K 1,64 --max-steps 40000
-
-# Warfarin -- export from R first (no compilation needed, pure data package):
-#   R> install.packages("nlmixr2data")
-#   R> write.csv(nlmixr2data::warfarin, "warfarin.csv", row.names = FALSE)
-# Check actual column names before loading:
-#   head -3 warfarin.csv
-uv run phase2/nlme_vi_phase2_realdata.py --csv warfarin.csv \
-    --col-map "ID=subject,TIME=time,DV=conc,AMT=dose" --K 1,64 --max-steps 40000
-
-# Synthetic placeholder (pipeline test only, not a real result) with
-# ground-truth bias reporting -- useful for the N-scaling check:
-uv run phase2/nlme_vi_phase2_realdata.py --n-subj 40 --K 1,64
+python nlme_vi_phase1.py   --scenarios dense,sparse   --families gaussian   --posteriors free,amortized   --K 1,8,64   --reps 30
 ```
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `--dataset theoph` | — | loads real Theophylline directly via `rdatasets` |
-| `--csv PATH` | — | your own long-format CSV |
-| `--col-map` | — | e.g. `"ID=subject,TIME=time,DV=conc,AMT=dose"` |
-| `--n-subj` | 12 | synthetic-placeholder-only; test N-scaling of small-sample bias |
-| `--K` | `1,64` | |
-| `--max-steps` | 25000 | |
-
-**Two real bugs found and fixed here, worth knowing about if extending to
-a new dataset:**
-1. **Pre-dose filtering.** The model predicts C(0)=0 exactly by
-   construction. Filtering "concentration <= 0" alone misses subjects whose
-   pre-dose reading is small-but-nonzero (assay noise) -- on Theoph, 3 of
-   12 subjects had exactly this, producing a residual SD ~23x too large and
-   preventing convergence entirely. Fixed by filtering on **time** (`t<=0`)
-   instead of concentration value. If you load a new dataset and the
-   "Dropping N pre-dose rows" message reports 0 or an implausible count,
-   check whether that dataset's dosing convention actually uses `time==0`.
-2. **Data-driven initial guess.** `theta_init` used to be hardcoded for the
-   synthetic scenario's scale (dose=100, CL~2-3). Real data on a different
-   scale (e.g. Theoph's mg/kg dosing, CL~0.04) was ~2 orders of magnitude
-   off, causing both K arms to fail to converge while still traveling
-   toward the right region of parameter space. Now derived from the data's
-   own dose/peak-concentration ratio.
-3. **Dose extraction assumed the wrong convention.** Found when loading
-   warfarin: Theoph's `Dose` column is a repeated per-subject covariate
-   (same value on every row); warfarin follows the more common
-   NONMEM/AMT convention -- dose is nonzero *only* on the EVID=1 dosing
-   row, zero on every observation row. Extracting dose via "first
-   surviving row after the pre-dose filter" (fine under Theoph's
-   convention) silently returned 0 for every subject under warfarin's,
-   since the pre-dose filter drops the one row carrying the real value.
-   Fixed by taking `max()` over each subject's dose column on the
-   *original, unfiltered* data -- correct under both conventions
-   regardless of which row survives later filtering.
-
-**Actual results obtained** (see Key Finding 4): Theoph (N=12, both K
-arms converged) shows Omega_V -18.2% at K=1 vs K=64; warfarin (N=32, both
-arms converged) shows Omega_V -8.6% and Omega_ka -17.0%, with fitted
-CL/V falling inside nlmixr2's published 95% CI on the same data.
-
-**CSV-overwrite gotcha**: this script always writes to the same default
-filename (`phase2_realdata_results.csv`) regardless of which
-`--dataset`/`--csv` was used. Running Theoph then warfarin without saving
-between runs means the second silently overwrites the first. **Copy the
-CSV to a dataset-specific name immediately after each run** (e.g. `cp
-phase2_realdata_results.csv phase2_realdata_theoph.csv`) -- this is what
-`publication/make_tables.py`/`make_figures.py` expect as input.
-
-Handles per-subject varying doses and ragged designs (different subjects,
-different numbers of observations) automatically.
-
-**Outputs:** `phase2_realdata_results.csv`.
-
-### `nlme_vi_phase2_psis.py` — does the per-subject trust diagnostic work?
+For flow analyses, the primary reportable configuration is the **free posterior**:
 
 ```bash
-python phase2/nlme_vi_phase2_psis.py --subjects 120 --bad-steps 30
+python nlme_vi_phase1.py   --scenarios dense,sparse   --families flow   --posteriors free   --K 1,8,64   --reps 30
 ```
 
-Fits the same data twice (converged vs. deliberately under-trained) and
-checks whether `is_marginal_loglik`'s ESS/top-share diagnostics separate
-them.
+The amortized-flow implementation tested here is excluded from primary results because of instability across all tested $K$.
 
-**Validated finding:** mean ESS separates cleanly and reproduces closely
-across runs (good ~1790-1810, bad ~1200-1200 at `--bad-steps 30`; gap
-widens with more severe under-training). A fixed per-subject tail-count
-threshold does **not** separate cleanly -- one specific subject is
-intrinsically hard to fit regardless of training length, in both arms.
-**Report aggregate ESS as the headline diagnostic**, not the tail-threshold
-counts.
+### Nonlinear tier
 
-**Outputs:** `phase2_psis_results.csv`, `phase2_psis_comparison.png`.
-
-### `nlme_vi_phase2_deltaofv.py` — is ΔOFV valid for likelihood-ratio tests?
-
-**This is the script behind Key Finding 5.** Simulates data under a known
-null (true Omega_ka=0), fits a reduced (2 random effects) and full (3
-random effects) model, and checks whether the empirical dOFV distribution
-matches the correct Self-Liang boundary-mixture reference (NOT plain
-chi-square(1) -- testing a variance component against its boundary is a
-non-regular problem; see the script's docstring for the full derivation).
-
-**Execution style: this is the one script with `if __name__ == "__main__":`**,
-unlike every other script in this repo. This is a hard requirement, not a
-style inconsistency: `--n-workers` uses `ProcessPoolExecutor`, and macOS's
-`spawn` start method re-imports this file in every worker process. Without
-the guard, every worker would re-run the entire experiment recursively.
-Function/class definitions above the guard are still fine to run cell-by-cell.
+The primary nonlinear analysis uses `OneCmtIVBolusMMNoKmRE`, with BSV on $V_{\max}$ and $V$, while $K_m$ is estimated as a fixed effect.
 
 ```bash
-# Free posterior (default) -- reproduces the miscalibration finding
-caffeinate -i uv run phase2/nlme_vi_phase2_deltaofv.py \
-    --reps 100 --subjects 120 --K 64 --n-workers 9
-
-# Amortized posterior -- the fix. Compare boundary fraction / KS p-value
-# against the free run above.
-caffeinate -i uv run phase2/nlme_vi_phase2_deltaofv.py \
-    --reps 100 --subjects 120 --K 64 --n-workers 9 --posterior amortized
-
-# Test the (ruled-out) IS-evaluation-noise hypothesis
-caffeinate -i uv run phase2/nlme_vi_phase2_deltaofv.py \
-    --reps 20 --subjects 120 --K 64 --eval-k 20000 --n-workers 9
+caffeinate -i python nlme_vi_phase1.py   --scenarios nonlinear   --families gaussian   --posteriors free   --nl-reps 20   --nl-subjects 60   --mm-dt 0.1   --n-workers 9   --out .
 ```
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `--reps` | 100 | KS test needs ~30-50+ positive-dOFV reps for real power |
-| `--subjects` | 120 | |
-| `--K` | 64 | training K -- use your best-corrected arm, not the known-biased K=1 |
-| `--eval-k` | 4000 (nlmevi_core default) | post-hoc likelihood evaluation precision -- **ruled out** as the fix (rep 48's outlier value stayed frozen at ~+8.3 across a 5x eval-k increase) |
-| `--posterior` | `free` | `free` (miscalibrated for this use case) or `amortized` (fixes the boundary-mass component -- see caveat below) |
-| `--n-workers` | 1 | replicates are fully independent; parallelize across processes. `caffeinate -i` recommended alongside this on macOS to prevent sleep-related slowdowns during long runs |
-| `--max-steps` | 25000 | |
-
-**Validated results** (N=120, K=64):
-
-| | free, n=100 | amortized, n=100 | amortized, n=300 (confirmatory) |
-|---|---|---|---|
-| boundary fraction (target ~50%) | 26.0% | **50.0%** | 48.3% |
-| KS p-value (target >0.05) | 0.0003 | 0.0295 (borderline) | **<0.0001** |
-| KS statistic (N-independent; compare directly) | ~0.20-0.24 | 0.2015 | **0.1864** |
-| verdict | FAIL | PASS (borderline) | technically FAIL, but see below |
-
-The n=300 KS p-value looks worse than n=100's, but this is a statistical
-power effect, not evidence the fix failed -- the KS *statistic* (which,
-unlike the p-value, doesn't shrink with sample size) barely moved
-(0.2015 -> 0.1864) and stayed below every free-posterior run's statistic.
-**The boundary-mass fraction (the part of the effective-degrees-of-freedom
-mechanism this fix directly targets) is confirmed real and stable across
-both sample sizes** (50.0% / 48.3%, both near the 50% target); what n=300
-revealed is a smaller, separate residual deviation in the shape of the
-non-boundary distribution, not a failure of the boundary-mass correction.
-Excluding non-converged fits does NOT explain the residual gap (checked:
-converged-only subset was, if anything, slightly further from the target).
-
-**Sigma-divergence follow-up** (n=100, amortized): added `sigma_reduced`/
-`sigma_full`/`sigma_diff` columns to test whether the reduced/full fits'
-residual-error estimates diverging on the same data explains the residual
-gap. Found a real correlation (`corr(sigma_diff, |dOFV|) = -0.536`, top-decile
-|dOFV| replicates show ~2.5x larger |sigma_diff|) -- but sigma appears
-directly inside the likelihood formula, so sigma and dOFV are mechanically
-coupled by construction; an overfitting event on a given dataset would
-naturally show up in both simultaneously, without sigma being an
-independent, previously-unaccounted-for degree of freedom the way the
-free posterior's per-subject parameters were. **Treat this as a real
-correlation without a confirmed causal mechanism, not a second finding**
--- the residual gap's actual source remains open.
-
-**Open items**: amortized runs showed a 23-27% non-convergence rate
-across both n=100 and n=300 (confirmed NOT the primary driver of the
-residual KS gap, but a separate quality issue worth its own fix -- likely
-needs a higher `--max-steps` specifically for this combination, not yet
-tried).
-
-**Outputs:** `phase2_deltaofv_results.csv`, `phase2_deltaofv_calibration.png`.
-Same overwrite gotcha as the real-data script: the default filename
-doesn't encode which `--posterior` was used -- save each condition's CSV
-under a distinct name (e.g. `phase2_deltaofv_free.csv` /
-`phase2_deltaofv_amortized.csv`) before running the next condition.
-
-### `baseline_nlmixr2.R` + `nlme_vi_phase2_baselines.py` — VI vs FOCEI vs SAEM
-
-```bash
-# Python-side pipeline test, no R needed (fully validated):
-uv run phase2/nlme_vi_phase2_baselines.py --subjects 20 --reps 1 --dry-run
-
-# Real run (blocked on R environment -- see Requirements above):
-uv run phase2/nlme_vi_phase2_baselines.py --subjects 20 --reps 1
-
-# Direct R-side test, bypassing the Python orchestrator entirely --
-# useful for isolating R issues (this is how the na="." bug and the
-# rxode2 compile issue were found):
-Rscript phase2/baseline_nlmixr2.R outputs/phase2_baselines/rep0_data.csv \
-    /tmp/test_foce.csv foce
-```
-
-**Two real bugs found and fixed** before ever getting a real R run:
-1. `write_nonmem_csv` writes `DV="."` for dosing rows (standard NONMEM
-   convention). `readr::read_csv`'s default NA values don't include `"."`,
-   so the whole DV column would parse as text. Fixed with explicit
-   `na = c("", "NA", ".")`.
-2. `--r-script`'s default was a relative path resolved against the
-   *caller's* working directory, not the script's own location -- same
-   class of bug as the `nlmevi_core` import issue. Fixed to resolve
-   relative to `Path(__file__).parent`.
-
-**Timing**: both `cpu_secs` (process CPU time, comparable across
-Python/R since both use process-time APIs) and `wall_secs` /
-`wall_secs_subprocess_total` (R process startup overhead) are tracked.
-Use `cpu_secs` for any speed claim.
-
-| Flag | Default | Meaning |
-|---|---|---|
-| `--subjects` | 120 | |
-| `--reps` | 5 | |
-| `--K-vi` | 64 | the corrected VI arm to compare |
-| `--r-script` | (auto, next to this script) | override only if relocating `baseline_nlmixr2.R` |
-| `--dry-run` | off | skip the actual R call, validate Python-side plumbing |
-| `--out` | `outputs/phase2_baselines` | |
-
-**Outputs:** `phase2_baseline_comparison.csv`, plus per-replicate
-`repN_data.csv` / `repN_foce.csv` / `repN_saem.csv`.
+Amortized-Gaussian fits were also explored on this tier and showed substantial instability that worsened with increasing $K$. Two candidate mechanisms are discussed in the manuscript: inference-network gradient degradation under importance-weighted training and a harder shared-encoder representation problem. Neither has been established causally.
 
 ---
 
-## `publication/` — manuscript tables and figures
+## Phase 2: real-data validation
 
-Both scripts follow the same design: read whichever result CSVs you have,
-skip gracefully (with a clear `[skip]` message) whenever a source isn't
-supplied or doesn't exist, and never guess which condition a file
-corresponds to.
+`phase2/nlme_vi_phase2_realdata.py` tests whether the simulation-derived $K=1$-vs-$K=64$ BSV pattern appears on real PK data.
 
-**Why explicit file paths for everything, not default filenames**: several
-scripts above write to a fixed default filename regardless of which
-condition was run (`nlme_vi_phase2_realdata.py` always writes
-`phase2_realdata_results.csv` whether you ran Theoph or warfarin;
-`nlme_vi_phase2_deltaofv.py` always writes `phase2_deltaofv_results.csv`
-whether `--posterior` was `free` or `amortized`). If you ran multiple
-conditions, you need to have already saved/renamed each one immediately
-after that run (see the CSV-overwrite gotcha called out in each section
-above) -- these scripts take one explicit `--<condition>-csv` flag per
-named result set rather than assuming a fixed layout, specifically so a
-missing save doesn't silently produce a table from the wrong condition.
+### Theophylline
 
 ```bash
-python publication/make_tables.py \
-    --phase0-csv outputs/phase0_results.csv \
-    --phase1-csv outputs/phase1_results.csv \
-    --nonlinear-csv outputs/phase1_nonlinear_results.csv \
-    --theoph-csv outputs/phase2_realdata_theoph.csv \
-    --warfarin-csv outputs/phase2_realdata_warfarin.csv \
-    --deltaofv-free-csv outputs/phase2_deltaofv_free.csv \
-    --deltaofv-amortized-csv outputs/phase2_deltaofv_amortized.csv \
-    --psis-csv outputs/phase2_psis_results.csv \
-    --baseline-csv outputs/phase2_baseline_comparison.csv \
-    --out publication/tables
-
-python publication/make_figures.py \
-    --phase0-csv outputs/phase0_results.csv \
-    --phase1-csv outputs/phase1_results.csv \
-    --nonlinear-csv outputs/phase1_nonlinear_results.csv \
-    --theoph-csv outputs/phase2_realdata_theoph.csv \
-    --warfarin-csv outputs/phase2_realdata_warfarin.csv \
-    --deltaofv-free-csv outputs/phase2_deltaofv_free.csv \
-    --deltaofv-amortized-csv outputs/phase2_deltaofv_amortized.csv \
-    --psis-csv outputs/phase2_psis_results.csv \
-    --out publication/figures
+uv run phase2/nlme_vi_phase2_realdata.py   --dataset theoph   --K 1,64   --max-steps 40000
 ```
 
-Every flag is optional -- run with whatever you have; tables/figures fill
-in as more results become available, nothing errors on a missing source.
+### Warfarin
 
-**`make_tables.py`** produces, for each available source: Phase 0 headline
-(Omega bias by posterior x K), Phase 1 Q2/Q4 grid (linear scenarios),
-Phase 1 Q3 (nonlinear tier, all parameters not just omegas), real-data
-K=1-vs-K=high (one row per dataset per parameter), dOFV calibration
-(boundary fraction, KS stat/p, type-I error under the correct reference),
-PSIS/ESS aggregate summary, and VI-vs-FOCEI/SAEM (only if the baseline
-comparison exists). Each table is written as both `.csv` (further
-processing) and `.md` (direct copy-paste into a manuscript draft), no
-extra dependencies (markdown writing is done manually, not via
-`DataFrame.to_markdown()`, which requires the separate `tabulate`
-package).
+Export `nlmixr2data::warfarin` from R if needed, then run the Python analysis with the appropriate column mapping.
 
-**`make_figures.py`** produces the matching figures. **Deliberately no
-captions or descriptive titles baked into the images** (no
-`fig.suptitle()` with a "what this shows" sentence) -- only the axis
-labels, legends, and panel labels needed for a plot to be interpretable on
-its own; caption text is left for the manuscript itself. 300 DPI PNG
-output.
+Both datasets reproduce the expected direction: $K=1$ gives smaller random-effect SD estimates than $K=64$ for at least some BSV parameters.
 
-**`reproduce.sh` does not exist yet** -- planned as a single script that
-re-runs everything end to end from a clean environment, for reviewers.
-Deliberately last on the list: building it before the numbers above are
-final would mean rebuilding it every time a result changes.
+Three data-handling lessons from this work should be preserved when extending the loader:
+
+- remove pre-dose observations based on **time**, not merely non-positive concentration;
+- derive initialization from the scale of the dataset;
+- extract dose from the original subject data in a way that supports both repeated-dose-covariate and NONMEM-style `AMT` conventions.
+
+**Output warning:** the real-data script uses a common default filename across datasets. Save each result immediately under a dataset-specific filename before running the next condition.
 
 ---
 
-## `commands.sh` — canonical run commands
-
-A set of documented, independently-callable shell functions, not a
-monolithic pipeline. Given how much of this project is iterative (tune a
-flag, look at the result, decide the next command), a single unattended
-"run everything" script would work against the actual workflow. Instead:
+## Phase 2: importance-sampling ESS
 
 ```bash
-# see what's available
+python phase2/nlme_vi_phase2_psis.py   --subjects 120   --bad-steps 30
+```
+
+The principal diagnostic is **aggregate importance-sampling ESS**. Mean or median ESS separates well-converged and deliberately under-trained fits more cleanly than a fixed per-subject tail-count threshold.
+
+---
+
+## Phase 2: likelihood-ratio calibration
+
+`phase2/nlme_vi_phase2_deltaofv.py` evaluates random-effect selection under the Self-Liang boundary-mixture reference,
+
+$$
+\frac{1}{2}\delta_0 + \frac{1}{2}\chi^2_1.
+$$
+
+Free posterior:
+
+```bash
+caffeinate -i uv run phase2/nlme_vi_phase2_deltaofv.py   --reps 100 --subjects 120 --K 64 --n-workers 9
+```
+
+Amortized posterior:
+
+```bash
+caffeinate -i uv run phase2/nlme_vi_phase2_deltaofv.py   --reps 100 --subjects 120 --K 64 --n-workers 9   --posterior amortized
+```
+
+The free posterior is miscalibrated for comparisons that change random-effect structure. The amortized posterior substantially restores the expected ~50% boundary mass, although a residual discrepancy remains in the positive component of the null distribution.
+
+This finding does **not** invalidate the BSV-estimation analyses, which do not depend on this likelihood-ratio test.
+
+---
+
+## FOCEI / SAEM benchmark
+
+The matched baseline comparison is implemented through:
+
+- `phase2/baseline_nlmixr2.R`
+- `phase2/nlme_vi_phase2_baselines.py`
+
+The final manuscript benchmark uses $N=120$ subjects and 20 replicate datasets. Each replicate is fit by FOCEI, SAEM, VI at $K=1$, and VI at $K=64$ on identical data.
+
+Direct R execution:
+
+```bash
+Rscript phase2/baseline_nlmixr2.R   outputs/phase2_baselines/rep0_data.csv   outputs/phase2_baselines/rep0_foce.csv   foce
+
+Rscript phase2/baseline_nlmixr2.R   outputs/phase2_baselines/rep0_data.csv   outputs/phase2_baselines/rep0_saem.csv   saem
+```
+
+### Accuracy
+
+FOCEI and SAEM recover the BSV parameters with small bias. VI at $K=64$ achieves similarly small bias, below 1.2% for every reported random-effect SD. VI at $K=1$ substantially underestimates $\omega_V$ and $\omega_{k_a}$.
+
+### Runtime
+
+Approximate manuscript means using process CPU time:
+
+| Method | Mean CPU time |
+|---|---:|
+| FOCEI | 11.25 s |
+| SAEM | 12.68 s |
+| VI, $K=1$ | 5.14 s |
+| VI, $K=64$ | 16.50 s |
+
+These values apply only to the simple analytic benchmark. Thread counts were not explicitly pinned between PyTorch and R/BLAS.
+
+---
+
+## Publication workflow
+
+The manuscript-facing publication pipeline is implemented in **R/tidyverse**.
+
+### Tables
+
+```bash
+bash commands.sh publication_tables_r
+```
+
+Outputs are written under:
+
+```text
+publication/tables/
+```
+
+Table terminology follows the manuscript:
+
+- **BSV** = between-subject variability
+- **RUV** = residual unexplained variability
+- BSV parameters $\omega$ are random-effect standard deviations
+
+### Figures
+
+```bash
+bash commands.sh publication_figures_r
+```
+
+Outputs are written under:
+
+```text
+publication/figures/
+```
+
+Scientific captions live in the Quarto manuscript rather than being baked into the images.
+
+The current manuscript uses primary figures for Phase 0 BSV bias, the dense/sparse Phase 1 grid, nonlinear BSV bias, real-data validation, ESS diagnostics, and $\Delta$OFV calibration. Supplementary figures show companion fixed-effect/RUV results.
+
+### Python publication scripts
+
+Earlier Python versions may remain useful as tested reference implementations, but the **R/tidyverse scripts are the manuscript-facing publication pipeline**. Avoid maintaining two independently evolving definitions of final manuscript outputs.
+
+---
+
+## Manuscript
+
+The current Quarto manuscript is:
+
+```text
+manuscript_copyedited.qmd
+```
+
+Render all configured formats with:
+
+```bash
+quarto render manuscript_copyedited.qmd
+```
+
+The manuscript is the source of truth for formal scientific interpretation, citations, limitations, and the distinction between primary and exploratory results. The README is intentionally more implementation-focused.
+
+---
+
+## `commands.sh`
+
+`commands.sh` provides named shell functions for common analyses.
+
+```bash
 bash commands.sh
-
-# run exactly one thing, with the flags this README recommends
 bash commands.sh phase1_gaussian_grid
-bash commands.sh deltaofv_amortized
-
-# or just open commands.sh and copy the line you want
+bash commands.sh publication_tables_r
+bash commands.sh publication_figures_r
 ```
 
-Each function bakes in the lessons from this whole debugging process --
-`caffeinate` where it matters, correct paths, sensible defaults -- so you
-get a correct starting command without re-deriving it each time, while
-keeping full control to run one function, edit one before running it, or
-ignore the file entirely and type your own command.
+For long macOS runs, use `caffeinate -i` where appropriate.
 
 ---
 
-## Known issues / open items
+## Known limitations and open questions
 
-- **`baseline_nlmixr2.R` / R environment**: unresolved, see Requirements
-  above. Not blocking anything else. Also doesn't implement the nonlinear
-  (MM) model -- it's hardcoded to the linear 1-compartment structure.
-  Deliberately not extended: not needed for this paper's claims (Q3 is
-  answered by the VI-internal K=1-vs-K=64 comparison, no external baseline
-  required), and would be a real, separate coding task (new `model()`
-  block, likely its own debugging cycle) if ever wanted for other purposes.
-- **Amortized+flow (Phase 1) is unstable at every tested K**, not just
-  K=1 -- see Key Finding 3. Not load-bearing for any core claim, excluded
-  from headline results at every K. Free+flow and free/amortized+gaussian
-  are unaffected and stable.
-- **dOFV residual calibration gap**: real, confirmed at n=100 and n=300,
-  source not identified. The boundary-mass component is fixed
-  (amortized-gaussian); a smaller residual deviation in the non-boundary
-  shape persists. A sigma-divergence hypothesis was tested and found
-  correlated but not conclusively causal (mechanically coupled with the
-  likelihood by construction -- see Key Finding 5 and the deltaofv
-  section above). Genuinely open; reportable as a stated limitation as-is.
-- **dOFV / amortized posterior non-convergence**: 23-27% non-convergence
-  rate, confirmed NOT the primary driver of the residual gap above, but a
-  separate quality issue worth its own fix (likely needs higher
-  `--max-steps` for this specific combination -- not yet tried).
-- **Nonlinear tier production run**: COMPLETE. free+gaussian is the clean,
-  reportable result (see Key Finding 6). amortized+gaussian failed
-  catastrophically and is excluded from headline results -- a new
-  instability, not the already-known amortized+flow one. Not investigated
-  further; free+gaussian alone answers Q3. `commands.sh`'s
-  `phase1_nonlinear_production` restricts to `--posteriors free` for this
-  reason (previously ran both).
-- **Runtime, for future planning**: 120 fits, 9-way parallel, ~88 CPU-hours
-  total, ~10-11 hours real elapsed time -- consistent with the cost model's
-  prediction (5-24h). The failed amortized cells cost roughly as much as
-  the successful free cells (non-convergence still runs the full
-  `--max-steps` budget), so excluding amortized going forward
-  meaningfully cuts future nonlinear-tier cost too, not just risk.
-- **CSV-overwrite gotcha (cross-cutting, applies to `nlme_vi_phase2_realdata.py`
-  and `nlme_vi_phase2_deltaofv.py`)**: both scripts always write to the same
-  default filename regardless of which condition (`--dataset`, `--posterior`)
-  was run. Running a second condition without saving the first's output
-  first **silently overwrites it** -- this already happened once during
-  development (a warfarin run overwrote an unsaved Theoph result). Copy
-  each condition's CSV to a distinct name immediately after that run
-  completes, before starting the next one. `publication/make_tables.py`
-  and `make_figures.py` are built around this -- they take one explicit
-  path per named condition rather than assuming a fixed layout.
-- **MPS (Apple Silicon GPU) does not support float64** -- a permanent
-  Metal backend limitation, confirmed by hitting it directly, not assumed
-  in advance. This project requires float64 throughout. `set_device()`
-  raises immediately and clearly for `mps` (or `auto` detecting it) rather
-  than failing deep in model construction. CPU is the only supported
-  device on Apple Silicon for this codebase; there is no float64
-  workaround. `cuda` remains untested for the RK4 nonlinear tier
-  specifically (no CUDA GPU available during development).
-- **N-scaling small-sample-bias finding**: currently 1 replicate per N
-  (12/40/80, and separately 15/40/80 for the nonlinear tier's Vmax/V).
-  Directionally clear and consistent across both the linear and nonlinear
-  tiers (bias shrinks as N grows, holding K fixed) but needs 5-10
-  replicates per N before citing the magnitude precisely.
-- **`reproduce.sh` doesn't exist yet** -- `make_tables.py`/`make_figures.py`
-  are done (see the `publication/` section above). `reproduce.sh` is
-  deliberately last: a single reviewer-facing script to run everything end
-  to end, which only makes sense to write once the numbers it reproduces
-  are actually final.
-- **Phase 3 (the nonlinear tier) is fully integrated into
-  `nlme_vi_phase1.py`, not a separate script.** Originally planned as a
-  standalone `nlme_vi_phase3_nonlinear.py`; that plan was superseded once
-  it became clear the nonlinear scenario shares everything else Phase 1
-  already has (fit_model, QC filtering, cpu_secs tracking, summarize_v2,
-  the CLI pattern) -- a separate file would have meant duplicating all of
-  it for no benefit. Run via `--scenarios nonlinear`. The recommended,
-  stable model is `OneCmtIVBolusMMNoKmRE` (IIV on Vmax and V only, Km
-  fixed -- see its docstring: putting IIV on both Vmax and Km
-  simultaneously is a known cross-method MM identifiability problem, not
-  a VI-specific one, confirmed empirically across four independent test
-  conditions in this project). The original 3-random-effect
-  `OneCmtIVBolusMM` still exists in `nlmevi_core.py`, unused by default,
-  kept only as the documented record of that instability. A second hard
-  tier (e.g. TMDD) would most naturally be another `get_scenario()` option
-  in `nlme_vi_phase1.py`, following the same pattern, rather than a new
-  file -- new model code following the same `log_prior`/`log_lik`/
-  `log_joint` interface is all that's actually needed.
+- **Amortized-flow architecture:** unstable across $K$ in the architecture tested here. A fixed-standard-normal-base design is a promising future direction.
+- **Nonlinear amortized-Gaussian instability:** deterioration with increasing $K$ is real, but the proposed gradient-SNR and representation-capacity explanations remain unconfirmed.
+- **Michaelis-Menten identifiability:** simultaneous BSV on $V_{\max}$ and $K_m$ was unstable; the primary nonlinear analysis uses BSV on $V_{\max}$ and $V$ only.
+- **LRT residual calibration:** amortization substantially corrects the boundary-mass problem, but the positive component remains imperfectly calibrated.
+- **Runtime scope:** the benchmark covers only a simple analytic linear model, and PyTorch/R-BLAS thread counts were not explicitly matched.
+- **Model scope:** generalization to multicomponent models, correlated random effects, covariate models, time-varying dosing, and additional RUV structures remains to be established.
+- **Nonlinear cross-method benchmark:** direct FOCEI/SAEM comparison on the Michaelis-Menten model remains future work.
+- **Reproduction wrapper:** a single reviewer-facing `reproduce.sh` would be useful once all final manuscript inputs and expensive analyses are frozen.
 
 ---
 
-## Practical tips learned the hard way
+## Practical notes
 
-- **Prevent sleep on long macOS runs**: prefix with `caffeinate -i`.
-  Sleep-interrupted fits show wall times 20-100x their normal duration with
-  no algorithmic explanation -- always check `cpu_secs` vs `wall_secs`
-  before trusting a runtime number from a long unattended run.
-- **Use `cpu_secs`, not wall-clock `secs`**, for any speed claim or
-  cross-run timing comparison. `time.process_time()` doesn't advance during
-  sleep and is far less sensitive to other-process contention.
-- **`--n-workers` (`nlme_vi_phase2_deltaofv.py` and `nlme_vi_phase1.py`)**:
-  fits/replicates are independent: `os.cpu_count() - 1` is a reasonable
-  default. Each worker is pinned to 1 PyTorch thread internally to avoid
-  CPU oversubscription -- don't remove this if extending the pattern
-  elsewhere. Both scripts require `if __name__ == "__main__":` for this to
-  work correctly (see each script's section above) -- a real, if minor,
-  deviation from the pure cell-based style used elsewhere in this repo.
-- **`--device`**: leave at the default `cpu`. MPS (Apple Silicon) doesn't
-  support float64 and will raise immediately rather than fail silently or
-  deep in model construction -- this isn't a bug to work around, there's
-  no fix available on the MPS side.
-- **Save condition-specific CSVs immediately, not "later."** Several
-  scripts share one default output filename across different conditions
-  (dataset, posterior) -- the second run silently overwrites the first.
-  This isn't hypothetical: it happened once during development. Copy the
-  file to a distinct name the moment a run finishes, before starting the
-  next one.
-- **Full paths beat bare commands when multiple R/Python installs are in
-  play** (e.g. via `rig`, Homebrew, or multiple terminal apps with
-  different PATH setups) -- `which R` / `which Rscript` before a long
-  debugging session saved real time more than once in this project.
+### Use CPU time for runtime comparisons
+
+Use process CPU-time fields rather than wall-clock time for scientific runtime comparisons. Wall time can be severely distorted by system sleep or unrelated process contention.
+
+### Prevent macOS sleep
+
+```bash
+caffeinate -i <command>
+```
+
+### Preserve condition-specific outputs
+
+Several scripts use the same default filename for multiple conditions. Rename or copy outputs immediately after each run.
+
+### Parallel execution
+
+Independent simulation replicates can be parallelized with `--n-workers`. On macOS, scripts using `ProcessPoolExecutor` require the standard:
+
+```python
+if __name__ == "__main__":
+```
+
+guard because workers are spawned by re-importing the module.
+
+### Do not silently change the statistical model
+
+When extending FOCEI/SAEM or VI code, ensure that the structural model, parameterization, BSV structure, RUV model, input data, and initialization philosophy remain matched across methods.
 
 ---
 
-## The one rule that matters most
+## Scientific interpretation in one paragraph
 
-**One seed generates one dataset. Every method arm in a comparison reads
-byte-identical data.** Enforced throughout `nlmevi_core.py` and every phase
-script -- preserve this if extending the codebase. Breaking it silently
-invalidates any bias comparison built on top.
+This repository shows that standard-ELBO VI can systematically shrink estimated between-subject variability in NLME models even when structural fixed effects are reasonably recovered. Tightening the variational objective through importance weighting substantially corrects that effect, and $K=64$ VI achieves FOCEI/SAEM-comparable parameter accuracy in the matched linear benchmark. Richer posterior families can also reduce the bias, but posterior architecture matters: some amortized configurations introduce distinct optimization or representation failures, and accurate point estimation does not by itself guarantee calibrated likelihood-ratio inference. Importance-sampling ESS provides a practical diagnostic of posterior fit quality, while the nonlinear and real-data experiments show that the central BSV result extends beyond the simplest simulated setting.
+
+---
+
+## Citation
+
+This repository accompanies the manuscript:
+
+> *Importance-Weighted Variational Inference for Nonlinear Mixed-Effects Models: Characterizing and Correcting Bias in Between-Subject Variability.*
+
+Citation details can be added after publication or preprint deposition.
