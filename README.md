@@ -118,7 +118,7 @@ The **training $K$** controls the IW-ELBO used to estimate model and variational
 
 ### Device support
 
-The project uses float64 throughout because high-$K$ importance weights can span many orders of magnitude. Apple's MPS backend does not support the required float64 operations, so Apple Silicon runs should use CPU. CUDA remains the appropriate GPU target where compatible hardware is available.
+The project uses float64 throughout because high\-$K$ importance weights can span many orders of magnitude. Apple's MPS backend does not support the required float64 operations, so Apple Silicon runs should use CPU. CUDA remains the appropriate GPU target where compatible hardware is available.
 
 ---
 
