@@ -14,7 +14,7 @@ The central result is simple: the standard evidence lower bound (**ELBO; $K=1$**
 
 2. **Sparse sampling worsens the effect.** At matched $K$, sparse designs produce greater BSV shrinkage than dense designs, consistent with weaker subject-level identifiability amplifying the variational approximation error.
 
-3. **A richer posterior family can reduce low-$K$ bias.** Free-posterior normalizing flows substantially reduce BSV bias in well-identified designs, including at $K=1$.
+3. **A richer posterior family can reduce low\-$K$ bias.** Free-posterior normalizing flows substantially reduce BSV bias in well-identified designs, including at $K=1$.
 
 4. **Amortized + flow is unstable in the architecture tested here.** The encoder output was used both to parameterize the flow base distribution and to condition the flow transformation. This configuration was unstable across $K=1,8,64$ and is excluded from primary results. A decoupled fixed-base design is a promising future direction but has not been evaluated at production scale.
 
