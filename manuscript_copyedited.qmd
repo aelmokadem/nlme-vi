@@ -19,6 +19,7 @@ crossref:
       reference-prefix: Table S
       caption-prefix: Table S
       space-before-numbering: false
+      caption-location: top
 ---
 
 ## Abstract
